@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "hackstone"
+version = "0.1.0"
+description = ""
+authors = ["Cheng-Hsun, Hsu <a10121555@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+googlemaps = "^4.10.0"
+ipython = "^9.0.2"
+pygments = "^2.19.1"
+python-dotenv = "^1.1.0"
+response = "^0.5.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
