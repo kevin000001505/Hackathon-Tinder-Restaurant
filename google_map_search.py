@@ -1,20 +1,23 @@
 import os
 from dotenv import load_dotenv
+import logging
 import googlemaps
 from datetime import datetime
 
 load_dotenv()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+logging.basicConfig(level=logging.INFO)
 
 if not GOOGLE_MAPS_API_KEY:
     raise ValueError("Please set the GOOGLE_MAPS_API_KEY environment variable.")
 
 
 class GoogleMapSearch:
-    def __init__(self, api_key):
+    def __init__(self, api_key=GOOGLE_MAPS_API_KEY):
         self.client = googlemaps.Client(key=api_key)
+        self.restaurant_info = list()
 
-    def search_places(self, query, location=None, radius=1000, page_token=None) -> list:
+    def search_restaurants(self, query, location=None, radius=1000, page_token=None):
         """
         Search for places using a query string.
         :param query: The search query string.
@@ -22,9 +25,10 @@ class GoogleMapSearch:
         :param radius: Optional. The distance (in meters) within which to return place results.
         :return: A list of 20 places matching the query.
         """
-        if location:
-            #
-            places_result = self.client.places(
+        if location is None:
+            raise ValueError("Location is required for searching restaurants.")
+        else:
+            restaurants_response = self.client.places(
                 query=query,
                 location=location,
                 radius=radius,
@@ -36,20 +40,66 @@ class GoogleMapSearch:
                 region=None,
                 page_token=page_token,
             )
-        else:
-            places_result = self.client.places(query=query)
+            next_page_token = restaurants_response.get("next_page_token")
+            restaurants_results = restaurants_response.get("results", [])
+            return restaurants_results, next_page_token
 
-        return places_result.get("results", [])
+
+    def search_place(self, query):
+        """
+        Search for a place using a query string.
+        :param query: The search query string.
+        :return: A dictionary containing the place ID and its latitude/longitude.
+        """
+        place_result = self.client.places(
+            input=query,
+            input_type="textquery",
+            fields=["place_id", "geometry/location"],
+        )
+        place_lat_lng = (
+            place_result.get("candidates", [{}])[0]
+            .get("geometry", {})
+            .get("location", {})
+        )
+        return place_lat_lng
+
+    def get_self_geocode(self):
+        """
+        Geocode your location to get latitude and longitude.
+        :return: A dictionary with latitude and longitude.
+        """
+        geocode_result = self.client.geolocate()
+        if geocode_result:
+            location = geocode_result.get("location", {})
+            return location
+
+    def get_place_photos(self, restaurant_info):
+        for restaurant in restaurant_info:
+            place_id = restaurant.get("place_id")
+            if place_id:
+                place_info = self.client.place(place_id=place_id, fields=["photos"])
+
+                for info in place_info["result"]["photos"]:
+                    photo_id = info["photo_reference"]
+                    raw_photo = self.client.places_photo(
+                        photo_reference=photo_id, max_width=400, max_height=400
+                    )
+                    f = open(f"photos/{photo_id}.jpg", "wb")
+                    for chunk in raw_photo:
+                        if chunk:
+                            f.write(chunk)
+                    f.close()
+        logging.info("Photos downloaded successfully.")
 
 
 if __name__ == "__main__":
-    gmaps = GoogleMapSearch(GOOGLE_MAPS_API_KEY)
+    gmaps = GoogleMapSearch()
     query = "Japanese restaurants"
     # maps_response = gmaps.geolocate()
     # location = maps_response.get('location')
     location = {"lat": 38.8248377, "lng": -77.3209443}  # The Main Street, Virginia
     radius = 5000  # 5 km
-    results = gmaps.search_places(query, location, radius)
+    results = gmaps.search_restaurants(query, location, radius)
 
     for place in results:
         print(f"Name: {place['name']}, Address: {place.get('vicinity', 'N/A')}")
