@@ -3,14 +3,37 @@ from dotenv import load_dotenv
 import logging
 import googlemaps
 from datetime import datetime
+import time
 
 load_dotenv()
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 logging.basicConfig(level=logging.INFO)
 
-if not GOOGLE_MAPS_API_KEY:
-    raise ValueError("Please set the GOOGLE_MAPS_API_KEY environment variable.")
+GOOGLE_MAPS_API_KEY = None
 
+def validate_google_api_key() -> str:
+    tries = 0
+    key_idx = 1
+    api_key = os.getenv(f"GOOGLE_MAPS_API_KEY_{key_idx}")
+    while api_key and tries < 10:
+        try:
+            # Try authenticating the API key
+            gmaps = googlemaps.Client(key=api_key)
+            geocode_result = gmaps.geocode('1600 Amphitheatre Parkway, Mountain View, CA')
+            if geocode_result:
+                return api_key
+            else:
+                logging.info("API key might be invalid or there was an issue with the request")
+        except Exception as e:
+            logging.info(e)
+            continue
+        key_idx += 1
+        api_key = os.getenv(f"GOOGLE_MAPS_API_KEY_{key_idx}")
+        tries += 1
+        time.sleep(1) # Try again in 1 second
+    raise ValueError("You have no valid API keys.")
+
+# Find valid Google Maps API key
+GOOGLE_MAPS_API_KEY = validate_google_api_key()
 
 class GoogleMapSearch:
     def __init__(self, api_key=GOOGLE_MAPS_API_KEY):
