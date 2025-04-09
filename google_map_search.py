@@ -22,9 +22,9 @@ def validate_google_api_key() -> str:
             if geocode_result:
                 return api_key
             else:
-                logging.info("API key might be invalid or there was an issue with the request")
+                logging.warning("API key might be invalid or there was an issue with the request")
         except Exception as e:
-            logging.info(e)
+            logging.error(e)
             continue
         key_idx += 1
         api_key = os.getenv(f"GOOGLE_MAPS_API_KEY_{key_idx}")
@@ -42,8 +42,8 @@ class GoogleMapSearch:
 
     def search_restaurants(self, query, location=None, radius=1000, page_token=None):
         """
-        Search for places using a query string.
-        :param query: The search query string.
+        If the user use their own lat and lng. Search for places using a restaurant type.
+        :param query: The search query string (restaurant type).
         :param location: Optional. The latitude/longitude around which to retrieve place information.
         :param radius: Optional. The distance (in meters) within which to return place results.
         :return: A list of 20 places matching the query.
@@ -65,42 +65,53 @@ class GoogleMapSearch:
             )
             next_page_token = restaurants_response.get("next_page_token")
             restaurants_results = restaurants_response.get("results", [])
-            return restaurants_results, next_page_token
+            logging.info(f"Result return: {len(restaurants_results)}")
+            logging.debug(f"Next Page Token Return: {next_page_token}")
+            if restaurants_results:
+                return restaurants_results, next_page_token
+            else:
+                raise ValueError("No restaurants found in the specified radius.")
+            
 
 
-    def search_place(self, query):
+    def search_place(self, address) -> dict:
         """
-        Search for a place using a query string.
-        :param query: The search query string.
-        :return: A dictionary containing the place ID and its latitude/longitude.
+        Search for a place using a address string.
+        :param address: The search address string.
+        :return: A dictionary containing its latitude/longitude.
         """
-        place_result = self.client.places(
-            input=query,
+        # Get the address info
+        address_result = self.client.places(
+            input=address,
             input_type="textquery",
             fields=["place_id", "geometry/location"],
         )
+        # Get the address latitude and longitude
         place_lat_lng = (
-            place_result.get("candidates", [{}])[0]
+            address_result.get("candidates", [{}])[0]
             .get("geometry", {})
             .get("location", {})
         )
         return place_lat_lng
 
-    def get_self_geocode(self):
+    def get_self_geocode(self) -> dict:
         """
-        Geocode your location to get latitude and longitude.
+        Geocode your location right now to get latitude and longitude.
         :return: A dictionary with latitude and longitude.
         """
         geocode_result = self.client.geolocate()
         if geocode_result:
             location = geocode_result.get("location", {})
             return location
+        else:
+            raise ValueError("Geolocation failed. Please check your API key or network connection.")
 
     def get_place_photos(self, restaurant_info):
         for restaurant in restaurant_info:
             place_id = restaurant.get("place_id")
             if place_id:
                 place_info = self.client.place(place_id=place_id, fields=["photos"])
+                logging.debug(place_info)
 
                 for info in place_info["result"]["photos"]:
                     photo_id = info["photo_reference"]
@@ -113,6 +124,36 @@ class GoogleMapSearch:
                             f.write(chunk)
                     f.close()
         logging.info("Photos downloaded successfully.")
+    
+    def get_nearby_restaurants(self, lat_lng, radius=1000) -> list:
+        """
+        Get nearby restaurants using latitude and longitude.
+        :param lat_lng: A dictionary containing latitude and longitude.
+        :param radius: The distance (in meters) within which to return place results.
+        :return: A list of places matching the query.
+        """
+        if lat_lng is None:
+            raise ValueError("Latitude and Longitude are required for searching nearby restaurants.")
+        if int(radius) > 100000:
+            raise ValueError("The radius must be less than 100,000 meters or we get no results.")
+        else:
+            restaurants_response = self.client.places_nearby(
+                location=lat_lng,
+                radius=radius, # max 100000 meters
+                keyword="restaurant",
+                language=None, 
+                min_price=None, # 0 to 4
+                max_price=None, # 0 to 4
+                open_now=True,
+                type="restaurant",
+                rank_by="prominence" # or "distance",
+            )
+            restaurants_results = restaurants_response.get("results", [])
+            logging.info(f"Result return: {len(restaurants_results)}")
+            if restaurants_results:
+                return restaurants_results
+            else:
+                raise ValueError("No restaurants found in the specified radius.")
 
 
 if __name__ == "__main__":

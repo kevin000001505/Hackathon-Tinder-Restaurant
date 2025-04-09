@@ -4,3 +4,5 @@
 *.jpg
 __pycache__
 venv
+*.html
+*.css
