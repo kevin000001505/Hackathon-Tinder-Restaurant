@@ -63,15 +63,28 @@ class GoogleMapSearch:
         else:
             raise ValueError("Geolocation failed. Please check your API key or network connection.")
 
-    def get_place_photos(self, photos:list) -> list:
+    def get_place_photos(self, place_id:str, raw_photos:list) -> list:
         result = []
-        if photos:
-            logging.debug(photos)
-            for photo in photos:
-                photo_html = photo.get("html_attributions", [])
-                if photo_html:
-                    result.append(photo_html)
+        photo_num = 0
+        if raw_photos:
+            logging.debug(raw_photos)
+            for photo in raw_photos:
+                photo_reference = photo.get("photo_reference", "")
+                if photo_reference:
+                    photo_response = self.client.places_photo(photo_reference=photo_reference, max_width=400, max_height=400)
+                    self.download_photo(place_id, photo_response, photo_num)
+                    photo_num += 1
+        logging.info(f"{photo_num} photos downloaded successfully.")
         return result
+    
+    def download_photo(self, place_id, photo_response, photo_num):
+        
+        f = open(f"photos/{place_id}_photo_{photo_num}.jpg", "wb")
+        for chunk in photo_response:
+            if chunk:
+                f.write(chunk)
+        f.close()
+        
     
     def get_nearby_restaurants(self, location=None, keyword=None, radius=10000, page_token=None):
         """
@@ -112,7 +125,7 @@ class GoogleMapSearch:
         :param place_id: The place ID of the restaurant.
         :return: A dictionary containing restaurant information.
         """
-        restaurant_info = self.client.place(place_id=place_id, fields=["name", "rating", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
+        restaurant_info = self.client.place(place_id=place_id, reviews_sort="newest", fields=["name", "rating", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
         return restaurant_info.get("result", {})
     
 
@@ -125,17 +138,18 @@ class GoogleMapSearch:
         results = []
         for restaurant in restaurants_results:
             place_id = restaurant.get("place_id")
+            types = restaurant.get("types", [])
             restaurant_info = self.get_info_by_place_id(place_id)
 
             restaurant_name = restaurant_info.get("name", "N/A")
             price_level = restaurant_info.get("price_level", "N/A")
-            types = restaurant_info.get("types", [])
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
             vicinity = restaurant_info.get("vicinity", "N/A")
             rating = restaurant_info.get("rating", "N/A")
             website = restaurant_info.get("website", "N/A")
             phone_number = restaurant_info.get("formatted_phone_number", "N/A")
-            photos = self.get_place_photos(restaurant_info.get("photos", []))
+            raw_photos = restaurant_info.get("photos", [])
+            photos = self.get_place_photos(place_id, raw_photos)
             reviews = restaurant_info.get("reviews", [])
             results.append(
                 {

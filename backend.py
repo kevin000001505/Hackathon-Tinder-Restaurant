@@ -8,7 +8,6 @@ last_info = {}
 @app.route("/search", methods=["GET"])
 def search_restaurants():
     global last_info
-    query = request.args.get("query", "restaurant") # restaurant type
     address = request.args.get("address") # address string
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)
@@ -21,7 +20,6 @@ def search_restaurants():
         restaurants_response, next_page_token = gmaps.get_nearby_restaurants(
             page_token=last_info.get("next_page_token"),
             location=last_info.get("lat_lng"),
-            keyword=last_info.get("query"),
             radius=last_info.get("radius")
         )
         restaurants_result = gmaps.extract_restaurant_info(restaurants_response)
@@ -36,20 +34,29 @@ def search_restaurants():
         lat_lng = gmaps.get_address_gecode(address)
     
     if lat_lng:
-        try:
-            restaurants_response, next_page_token = gmaps.get_nearby_restaurants(lat_lng, query, radius)
-            restaurants_result = gmaps.extract_restaurant_info(restaurants_response)
-            if next_page_token:
-                last_info["next_page_token"] = next_page_token
-                last_info["lat_lng"] = lat_lng
-                last_info["query"] = query
-                last_info["radius"] = radius
-            return jsonify({
-                "results": restaurants_result,
-                "next_page_token": next_page_token
-            })
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
+        # try:
+        #     restaurants_response, next_page_token = gmaps.get_nearby_restaurants(lat_lng, radius)
+        #     restaurants_result = gmaps.extract_restaurant_info(restaurants_response)
+        #     if next_page_token:
+        #         last_info["next_page_token"] = next_page_token
+        #         last_info["lat_lng"] = lat_lng
+        #         last_info["radius"] = radius
+        #     return jsonify({
+        #         "results": restaurants_result,
+        #         "next_page_token": next_page_token
+        #     })
+        # except ValueError as e:
+        #     return jsonify({"error": str(e)}), 400
+        restaurants_response, next_page_token = gmaps.get_nearby_restaurants(location=lat_lng, radius=radius)
+        restaurants_result = gmaps.extract_restaurant_info(restaurants_response)
+        if next_page_token:
+            last_info["next_page_token"] = next_page_token
+            last_info["lat_lng"] = lat_lng
+            last_info["radius"] = radius
+        return jsonify({
+            "results": restaurants_result,
+            "next_page_token": next_page_token
+        })
 
     else:
         return jsonify({"error": "lat_lng are required."}), 400
