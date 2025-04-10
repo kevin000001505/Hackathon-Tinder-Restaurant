@@ -8,9 +8,9 @@
                 </template>
             </Card>
             <Card>
-                <template #title>Price {{ '$'.repeat(price) }}</template>
+                <template #title>Price {{ priceDisplay }}</template>
                 <template #content>
-                    <Slider v-model="price" min="1" max="4"/>
+                    <Slider v-model="price" :min="1" :max="4" :step="1"/>
                 </template>
             </Card>
         </Drawer>
@@ -35,9 +35,10 @@ import Drawer from 'primevue/drawer';
 import Button from 'primevue/button';
 import Slider from 'primevue/slider';
 import Card from 'primevue/card';
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 const drawer = ref(false);
 const distance = ref(15);
 const price = ref(2);
+const priceDisplay = computed(() => '$'.repeat(price.value));
 </script>
