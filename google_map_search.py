@@ -40,48 +40,14 @@ class GoogleMapSearch:
         self.client = googlemaps.Client(key=api_key)
         self.restaurant_info = list()
 
-    def search_restaurants(self, query, location=None, radius=1000, page_token=None):
-        """
-        If the user use their own lat and lng. Search for places using a restaurant type.
-        :param query: The search query string (restaurant type).
-        :param location: Optional. The latitude/longitude around which to retrieve place information.
-        :param radius: Optional. The distance (in meters) within which to return place results.
-        :return: A list of 20 places matching the query.
-        """
-        if location is None:
-            raise ValueError("Location is required for searching restaurants.")
-        else:
-            restaurants_response = self.client.places(
-                query=query,
-                location=location,
-                radius=radius,
-                language=None,
-                min_price=None,
-                max_price=None,
-                open_now=False,
-                type="restaurant",
-                region=None,
-                page_token=page_token,
-            )
-            next_page_token = restaurants_response.get("next_page_token")
-            restaurants_results = restaurants_response.get("results", [])
-            logging.info(f"Result return: {len(restaurants_results)}")
-            logging.debug(f"Next Page Token Return: {next_page_token}")
-            if restaurants_results:
-                return restaurants_results, next_page_token
-            else:
-                raise ValueError("No restaurants found in the specified radius.")
-            
-
-
-    def search_place(self, address) -> dict:
+    def get_address_gecode(self, address) -> dict:
         """
         Search for a place using a address string.
         :param address: The search address string.
         :return: A dictionary containing its latitude/longitude.
         """
         # Get the address info
-        address_result = self.client.places(
+        address_result = self.client.place(
             input=address,
             input_type="textquery",
             fields=["place_id", "geometry/location"],
@@ -125,33 +91,35 @@ class GoogleMapSearch:
                     f.close()
         logging.info("Photos downloaded successfully.")
     
-    def get_nearby_restaurants(self, lat_lng, radius=1000) -> list:
+    def get_nearby_restaurants(self, location, keyword, radius=1000, page_token=None):
         """
         Get nearby restaurants using latitude and longitude.
         :param lat_lng: A dictionary containing latitude and longitude.
         :param radius: The distance (in meters) within which to return place results.
         :return: A list of places matching the query.
         """
-        if lat_lng is None:
+        if location is None:
             raise ValueError("Latitude and Longitude are required for searching nearby restaurants.")
         if int(radius) > 100000:
             raise ValueError("The radius must be less than 100,000 meters or we get no results.")
         else:
             restaurants_response = self.client.places_nearby(
-                location=lat_lng,
+                location=location,
                 radius=radius, # max 100000 meters
-                keyword="restaurant",
+                keyword=keyword,
                 language=None, 
                 min_price=None, # 0 to 4
                 max_price=None, # 0 to 4
                 open_now=True,
                 type="restaurant",
-                rank_by="prominence" # or "distance",
+                rank_by="prominence", # or "distance",
+                page_token=page_token
             )
+            next_page_token = restaurants_response.get("next_page_token")
             restaurants_results = restaurants_response.get("results", [])
             logging.info(f"Result return: {len(restaurants_results)}")
             if restaurants_results:
-                return restaurants_results
+                return restaurants_results, next_page_token
             else:
                 raise ValueError("No restaurants found in the specified radius.")
 
@@ -159,11 +127,9 @@ class GoogleMapSearch:
 if __name__ == "__main__":
     gmaps = GoogleMapSearch()
     query = "Japanese restaurants"
-    # maps_response = gmaps.geolocate()
-    # location = maps_response.get('location')
     location = {"lat": 38.8248377, "lng": -77.3209443}  # The Main Street, Virginia
     radius = 5000  # 5 km
-    results = gmaps.search_restaurants(query, location, radius)
+    results = gmaps.get_nearby_restaurants(location, query, radius)
 
     for place in results:
         print(f"Name: {place['name']}, Address: {place.get('vicinity', 'N/A')}")
