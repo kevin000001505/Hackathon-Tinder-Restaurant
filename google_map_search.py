@@ -38,7 +38,6 @@ GOOGLE_MAPS_API_KEY = validate_google_api_key()
 class GoogleMapSearch:
     def __init__(self, api_key=GOOGLE_MAPS_API_KEY):
         self.client = googlemaps.Client(key=api_key)
-        self.restaurant_info = list()
 
     def get_address_gecode(self, address) -> dict:
         """
@@ -46,18 +45,10 @@ class GoogleMapSearch:
         :param address: The search address string.
         :return: A dictionary containing its latitude/longitude.
         """
-        # Get the address info
-        address_result = self.client.place(
-            input=address,
-            input_type="textquery",
-            fields=["place_id", "geometry/location"],
-        )
+
         # Get the address latitude and longitude
-        place_lat_lng = (
-            address_result.get("candidates", [{}])[0]
-            .get("geometry", {})
-            .get("location", {})
-        )
+        place_info = self.client.geocode(address)
+        place_lat_lng = place_info[0].get("geometry", {}).get("location", {})
         return place_lat_lng
 
     def get_self_geocode(self) -> dict:
@@ -72,26 +63,17 @@ class GoogleMapSearch:
         else:
             raise ValueError("Geolocation failed. Please check your API key or network connection.")
 
-    def get_place_photos(self, restaurant_info):
-        for restaurant in restaurant_info:
-            place_id = restaurant.get("place_id")
-            if place_id:
-                place_info = self.client.place(place_id=place_id, fields=["photos"])
-                logging.debug(place_info)
-
-                for info in place_info["result"]["photos"]:
-                    photo_id = info["photo_reference"]
-                    raw_photo = self.client.places_photo(
-                        photo_reference=photo_id, max_width=400, max_height=400
-                    )
-                    f = open(f"photos/{photo_id}.jpg", "wb")
-                    for chunk in raw_photo:
-                        if chunk:
-                            f.write(chunk)
-                    f.close()
-        logging.info("Photos downloaded successfully.")
+    def get_place_photos(self, photos:list) -> list:
+        result = []
+        if photos:
+            logging.debug(photos)
+            for photo in photos:
+                photo_html = photo.get("html_attributions", [])
+                if photo_html:
+                    result.append(photo_html)
+        return result
     
-    def get_nearby_restaurants(self, location, keyword, radius=1000, page_token=None):
+    def get_nearby_restaurants(self, location=None, keyword=None, radius=10000, page_token=None):
         """
         Get nearby restaurants using latitude and longitude.
         :param lat_lng: A dictionary containing latitude and longitude.
@@ -110,7 +92,7 @@ class GoogleMapSearch:
                 language=None, 
                 min_price=None, # 0 to 4
                 max_price=None, # 0 to 4
-                open_now=True,
+                open_now=False,
                 type="restaurant",
                 rank_by="prominence", # or "distance",
                 page_token=page_token
@@ -122,6 +104,57 @@ class GoogleMapSearch:
                 return restaurants_results, next_page_token
             else:
                 raise ValueError("No restaurants found in the specified radius.")
+
+
+    def get_info_by_place_id(self, place_id):
+        """
+        Get restaurant information using place_id.
+        :param place_id: The place ID of the restaurant.
+        :return: A dictionary containing restaurant information.
+        """
+        restaurant_info = self.client.place(place_id=place_id, fields=["name", "rating", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
+        return restaurant_info.get("result", {})
+    
+
+    def extract_restaurant_info(self, restaurants_results):
+        """
+        Extract restaurant information from the response.
+        :param restaurant_info: The response from the Google Maps API.
+        :return: A list of dictionaries containing restaurant information.
+        """
+        results = []
+        for restaurant in restaurants_results:
+            place_id = restaurant.get("place_id")
+            restaurant_info = self.get_info_by_place_id(place_id)
+
+            restaurant_name = restaurant_info.get("name", "N/A")
+            price_level = restaurant_info.get("price_level", "N/A")
+            types = restaurant_info.get("types", [])
+            total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
+            vicinity = restaurant_info.get("vicinity", "N/A")
+            rating = restaurant_info.get("rating", "N/A")
+            website = restaurant_info.get("website", "N/A")
+            phone_number = restaurant_info.get("formatted_phone_number", "N/A")
+            photos = self.get_place_photos(restaurant_info.get("photos", []))
+            reviews = restaurant_info.get("reviews", [])
+            results.append(
+                {
+                    "place_id": place_id,
+                    "restaurant_name": restaurant_name,
+                    "price_level": price_level,
+                    "rating": rating,
+                    "types": types,
+                    "total_user_ratings": total_user_ratings,
+                    "vicinity": vicinity,
+                    "website": website,
+                    "phone_number": phone_number,
+                    "photos": photos, # list of photo html
+                    "reviews": reviews, # list of reviews
+                }
+            )
+        return results
+
+
 
 
 if __name__ == "__main__":
