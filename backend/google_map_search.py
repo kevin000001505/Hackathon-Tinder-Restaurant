@@ -125,7 +125,7 @@ class GoogleMapSearch:
         :param place_id: The place ID of the restaurant.
         :return: A dictionary containing restaurant information.
         """
-        restaurant_info = self.client.place(place_id=place_id, reviews_sort="newest", fields=["name", "rating", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
+        restaurant_info = self.client.place(place_id=place_id, reviews_sort="newest", fields=["name", "review", "rating", "type", "price_level", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
         return restaurant_info.get("result", {})
     
 
@@ -138,7 +138,6 @@ class GoogleMapSearch:
         results = []
         for restaurant in restaurants_results:
             place_id = restaurant.get("place_id")
-            types = restaurant.get("types", [])
             restaurant_info = self.get_info_by_place_id(place_id)
 
             restaurant_name = restaurant_info.get("name", "N/A")
@@ -146,10 +145,12 @@ class GoogleMapSearch:
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
             vicinity = restaurant_info.get("vicinity", "N/A")
             rating = restaurant_info.get("rating", "N/A")
+            types = restaurant_info.get("types", [])
             website = restaurant_info.get("website", "N/A")
             phone_number = restaurant_info.get("formatted_phone_number", "N/A")
             raw_photos = restaurant_info.get("photos", [])
-            photos = self.get_place_photos(place_id, raw_photos)
+            # photos = self.get_place_photos(place_id, raw_photos)
+            photos = raw_photos
             reviews = restaurant_info.get("reviews", [])
             results.append(
                 {
