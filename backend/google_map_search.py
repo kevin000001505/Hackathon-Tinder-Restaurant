@@ -1,14 +1,12 @@
-import os
+import time, os, threading, logging, googlemaps
 from dotenv import load_dotenv
-import logging
-import googlemaps
-from datetime import datetime
-import time
+from datetime import datetime, timedelta
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 GOOGLE_MAPS_API_KEY = None
+IMAGE_EXPIRY_SECONDS = 3600  # Image expiry time
 
 def validate_google_api_key() -> str:
     tries = 0
@@ -38,6 +36,7 @@ GOOGLE_MAPS_API_KEY = validate_google_api_key()
 class GoogleMapSearch:
     def __init__(self, api_key=GOOGLE_MAPS_API_KEY):
         self.client = googlemaps.Client(key=api_key)
+        self.photos = {} # Store download time for photos for automatic cleanup
 
     def get_address_gecode(self, address) -> dict:
         """
@@ -64,27 +63,50 @@ class GoogleMapSearch:
             raise ValueError("Geolocation failed. Please check your API key or network connection.")
 
     def get_place_photos(self, place_id:str, raw_photos:list) -> list:
-        result = []
         photo_num = 0
         if raw_photos:
             logging.debug(raw_photos)
-            for photo in raw_photos:
-                photo_reference = photo.get("photo_reference", "")
-                if photo_reference:
-                    photo_response = self.client.places_photo(photo_reference=photo_reference, max_width=400, max_height=400)
-                    self.download_photo(place_id, photo_response, photo_num)
+            
+            # Create the list of urls to the photos
+            image_urls = [f'http://127.0.0.1:5000/photos/{place_id}/{num}' for num in range(photo_num)]
+
+            # If photos are already cached, skipped downloading
+            if not os.path.isdir(f'photos/{place_id}'):
+                os.mkdir(f'photos/{place_id}')
+                for photo in raw_photos[:3]:
+                    photo_reference = photo.get("photo_reference", "")
+                    if photo_reference:
+                        photo_response = self.client.places_photo(photo_reference=photo_reference, max_width=400, max_height=400)
+                        self.download_photo(place_id, photo_response, photo_num)
                     photo_num += 1
+            
+            return image_urls
+        
         logging.info(f"{photo_num} photos downloaded successfully.")
-        return result
+        return None
+        
     
     def download_photo(self, place_id, photo_response, photo_num):
-        
-        f = open(f"photos/{place_id}_photo_{photo_num}.jpg", "wb")
-        for chunk in photo_response:
-            if chunk:
-                f.write(chunk)
-        f.close()
-        
+        self.photos[place_id] = datetime.now()
+        with open(f"photos/{place_id}/{photo_num}.jpg", "wb") as f:
+            for chunk in photo_response:
+                if chunk:
+                    f.write(chunk)
+    
+    def cleanup_photos(self, place_id):
+        os.rmdir(f"photos/{place_id}")
+        self.photos.pop(place_id)
+
+    # Background cleanup thread
+    def auto_cleanup_photos(self):
+        while True:
+            time.sleep(10)  # Sweep interval
+            now = datetime.now()
+            expired_keys = [key for key, data in self.photos.items()
+                            if now - data > timedelta(seconds=IMAGE_EXPIRY_SECONDS)]
+            for key in expired_keys:
+                self.cleanup_photos(key)
+                logging.debug(f"Deleted expired photos: {key}")
     
     def get_nearby_restaurants(self, location=None, keyword=None, radius=10000, page_token=None):
         """
@@ -136,7 +158,7 @@ class GoogleMapSearch:
         :return: A list of dictionaries containing restaurant information.
         """
         results = []
-        for restaurant in restaurants_results:
+        for restaurant in restaurants_results[:3]:
             place_id = restaurant.get("place_id")
             restaurant_info = self.get_info_by_place_id(place_id)
 
@@ -149,8 +171,7 @@ class GoogleMapSearch:
             website = restaurant_info.get("website", "N/A")
             phone_number = restaurant_info.get("formatted_phone_number", "N/A")
             raw_photos = restaurant_info.get("photos", [])
-            # photos = self.get_place_photos(place_id, raw_photos)
-            photos = raw_photos
+            photos = self.get_place_photos(place_id, raw_photos)
             reviews = restaurant_info.get("reviews", [])
             results.append(
                 {
@@ -163,7 +184,7 @@ class GoogleMapSearch:
                     "vicinity": vicinity,
                     "website": website,
                     "phone_number": phone_number,
-                    "photos": photos, # list of photo html
+                    "photos": photos, # list of photo urls
                     "reviews": reviews, # list of reviews
                 }
             )
@@ -174,6 +195,7 @@ class GoogleMapSearch:
 
 if __name__ == "__main__":
     gmaps = GoogleMapSearch()
+    threading.Thread(target=gmaps.auto_cleanup_photos, daemon=True).start()
     query = "Japanese restaurants"
     location = {"lat": 38.8248377, "lng": -77.3209443}  # The Main Street, Virginia
     radius = 5000  # 5 km

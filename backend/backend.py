@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from google_map_search import GoogleMapSearch
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 gmaps = GoogleMapSearch()
@@ -59,6 +60,10 @@ def geolocate():
         return jsonify(location)
     except ValueError as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/photos/<place_id>/<photo_id>')
+def get_photos(place_id, photo_id):
+    return send_file(os.path.join("photos", place_id, photo_id + ".jpg"), mimetype='image/jpeg')
 
 if __name__ == "__main__":
     app.run(debug=True)
