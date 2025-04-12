@@ -28,7 +28,7 @@
         <div v-if="!isMobile" class="absolute flex justify-center top-0 left-0 w-3/20 h-full">
             <img src="./assets/attach_money.svg"></img>
         </div>
-        <div :class="isMobile ? 'flex flex-col h-full w-full' : 'flex flex-col h-full w-7/10'">
+        <div :class="isMobile ? 'flex flex-col h-full w-17/20' : 'flex flex-col h-full w-7/10'">
             <div class="flex h-1/80 py-0.5">
                 <ProgressBar :value="progress0" style="--p-progressbar-height: 100%" class="w-1/3" :showValue="false"/>
                 <ProgressBar :value="progress1" style="--p-progressbar-height: 100%" class="w-1/3" :showValue="false"/>
