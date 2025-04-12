@@ -25,10 +25,10 @@
         </Card>
     </Drawer>
     <div class="flex w-dvw h-dvh justify-center">
-        <div class="absolute flex justify-center top-0 left-0 w-3/20 h-full">
+        <div v-if="!isMobile" class="absolute flex justify-center top-0 left-0 w-3/20 h-full">
             <img src="./assets/attach_money.svg"></img>
         </div>
-        <div class="flex flex-col w-7/10 h-full">
+        <div :class="isMobile ? 'flex flex-col h-full w-full' : 'flex flex-col h-full w-7/10'">
             <div class="flex h-1/80 py-0.5">
                 <ProgressBar :value="progress0" style="--p-progressbar-height: 100%" class="w-1/3" :showValue="false"/>
                 <ProgressBar :value="progress1" style="--p-progressbar-height: 100%" class="w-1/3" :showValue="false"/>
@@ -67,7 +67,7 @@
                 </div>
             </div>
         </div>
-        <div class="absolute flex justify-center top-0 right-0 w-3/20 h-full">
+        <div v-if="!isMobile" class="absolute flex justify-center top-0 right-0 w-3/20 h-full">
             <img src="./assets/attach_money.svg">
         </img></div>
     </div>
@@ -80,7 +80,7 @@ import Slider from 'primevue/slider';
 import Card from 'primevue/card';
 import ScrollPanel from 'primevue/scrollpanel';
 import ProgressBar from 'primevue/progressbar';
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import ConfirmDialog from 'primevue/confirmdialog';
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
@@ -169,8 +169,23 @@ async function getRestaurantPhotos(place_id) {
     }
 }
 
+const isMobile = ref(checkIsMobile());
+function checkIsMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+    .test(navigator.userAgent)
+}
+
+function updateIsMobile() {
+  isMobile.value = checkIsMobile();
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateIsMobile);
+});
+
 onMounted(() => {
-    getRestaurantsInfo()
+    window.addEventListener('resize', updateIsMobile);
+    getRestaurantsInfo();
 })
 
 const drawer = ref(false);
