@@ -3,7 +3,6 @@
 *.ipynb
 *.jpg
 __pycache__
-venv
 yelp_academic_dataset_business.json
 Takeout
 restaurant_data.json
