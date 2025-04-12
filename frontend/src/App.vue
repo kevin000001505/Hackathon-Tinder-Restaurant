@@ -1,4 +1,6 @@
 <template>
+    <Toast />
+    <ConfirmDialog></ConfirmDialog>
     <Drawer v-model:visible="drawer" header="Settings">
         <Card>
             <template #title>Distance {{ distance }}</template>
@@ -12,8 +14,20 @@
                 <Slider v-model="price" :min="1" :max="4" :step="1"/>
             </template>
         </Card>
+        <Card>
+            <template #title>🍙 Subscribe to Restaurant Tinder Plus Premium to remove ads 🍙</template>
+            <template #content>
+                <div class="flex flex-col justify-center">
+                    <Button label="Only $49.99/year" @click="adButton()"></Button>
+                    Less than your Netflix subscription!
+                </div>
+            </template>
+        </Card>
     </Drawer>
     <div class="flex w-dvw h-dvh justify-center">
+        <div class="absolute flex justify-center top-0 left-0 w-3/20 h-full">
+            <img src="./assets/attach_money.svg"></img>
+        </div>
         <div class="flex flex-col w-7/10 h-full">
             <div class="flex h-1/80 py-0.5">
                 <ProgressBar :value="progress0" style="--p-progressbar-height: 100%" class="w-1/3" :showValue="false"/>
@@ -53,6 +67,9 @@
                 </div>
             </div>
         </div>
+        <div class="absolute flex justify-center top-0 right-0 w-3/20 h-full">
+            <img src="./assets/attach_money.svg">
+        </img></div>
     </div>
 </template>
 
@@ -64,6 +81,35 @@ import Card from 'primevue/card';
 import ScrollPanel from 'primevue/scrollpanel';
 import ProgressBar from 'primevue/progressbar';
 import { ref, computed, onMounted } from "vue";
+import ConfirmDialog from 'primevue/confirmdialog';
+import { useConfirm } from "primevue/useconfirm";
+import { useToast } from "primevue/usetoast";
+import Toast from 'primevue/toast';
+
+const confirm = useConfirm();
+const toast = useToast();
+
+const adButton = () => {
+    confirm.require({
+        message: 'We haven\'t implement our payment system yet...',
+        header: '😔 Sorry 😔',
+        icon: 'pi pi-exclamation-triangle',
+        acceptProps: {
+            label: 'Ok 😒'
+        },
+        rejectProps: {
+            label: 'Cancel',
+            severity: 'danger',
+            outlined: true
+        },
+        accept: () => {
+            toast.add({ severity: 'info', summary: 'Confirmed', detail: 'We are open to the idea though 🤑', life: 3000 });
+        },
+        reject: () => {
+            toast.add({ severity: 'error', summary: 'Cancel', detail: 'Give it some though? 😦', life: 3000 });
+        }
+    });
+};
 
 const restaurant_info = ref();
 const backend_url = 'http://127.0.0.1:5000'
