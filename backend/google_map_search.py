@@ -146,7 +146,6 @@ class GoogleMapSearch:
         results = []
         for restaurant in restaurants_results:
             place_id = restaurant.get("place_id")
-            vicinity = restaurant.get("vicinity", "N/A")
             restaurant_info = self.get_info_by_place_id(place_id)
 
             restaurant_name = restaurant_info.get("name", "N/A")
@@ -155,10 +154,9 @@ class GoogleMapSearch:
             open_now = restaurant_info.get("current_opening_hours", {}).get("open_now", False)
             periods = restaurant_info.get("current_opening_hours", {}).get("periods", False)
             opening_hours_text = self.clean_weekday_text(restaurant_info.get("current_opening_hours", {}).get("weekday_text", []))
-
-                # opening_hours_text = self.clean_weekday_text(opening_hours_text)
             price_level = restaurant_info.get("price_level", "N/A")
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
+            vicinity = restaurant_info.get("vicinity", "N/A")
             rating = restaurant_info.get("rating", "N/A")
             types = restaurant_info.get("types", [])
             website = restaurant_info.get("website", "N/A")
