@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import logging
 import googlemaps
-from datetime import datetime
+import unicodedata
 import time
 
 load_dotenv()
@@ -63,15 +63,28 @@ class GoogleMapSearch:
         else:
             raise ValueError("Geolocation failed. Please check your API key or network connection.")
 
-    def get_place_photos(self, photos:list) -> list:
+    def get_place_photos(self, place_id:str, raw_photos:list) -> list:
         result = []
-        if photos:
-            logging.debug(photos)
-            for photo in photos:
-                photo_html = photo.get("html_attributions", [])
-                if photo_html:
-                    result.append(photo_html)
+        photo_num = 0
+        if raw_photos:
+            logging.debug(raw_photos)
+            for photo in raw_photos:
+                photo_reference = photo.get("photo_reference", "")
+                if photo_reference:
+                    photo_response = self.client.places_photo(photo_reference=photo_reference, max_width=400, max_height=400)
+                    self.download_photo(place_id, photo_response, photo_num)
+                    photo_num += 1
+        logging.info(f"{photo_num} photos downloaded successfully.")
         return result
+    
+    def download_photo(self, place_id, photo_response, photo_num):
+        
+        f = open(f"photos/{place_id}_photo_{photo_num}.jpg", "wb")
+        for chunk in photo_response:
+            if chunk:
+                f.write(chunk)
+        f.close()
+        
     
     def get_nearby_restaurants(self, location=None, keyword=None, radius=10000, page_token=None):
         """
@@ -112,9 +125,17 @@ class GoogleMapSearch:
         :param place_id: The place ID of the restaurant.
         :return: A dictionary containing restaurant information.
         """
-        restaurant_info = self.client.place(place_id=place_id, fields=["name", "rating", "user_ratings_total", "formatted_phone_number", "website", "reviews", "photo", "curbside_pickup", "delivery"])
+        restaurant_info = self.client.place(place_id=place_id, reviews_sort="newest", fields=['website', 'takeout', 'formatted_address', 'serves_breakfast', 'business_status', 'serves_wine', 'url', 'serves_vegetarian_food', 'vicinity', 'name', 'dine_in', 'geometry', 'user_ratings_total', 'price_level', 'current_opening_hours', 'reviews', 'adr_address', 'serves_beer', 'place_id', 'type', 'review', 'opening_hours', 'serves_brunch', 'permanently_closed', 'rating', 'formatted_phone_number', 'delivery', 'geometry/location', 'photo', 'wheelchair_accessible_entrance', 'utc_offset', 'editorial_summary', 'curbside_pickup', 'address_component', 'reservable', 'serves_lunch', 'serves_dinner'])
         return restaurant_info.get("result", {})
     
+    import unicodedata
+
+    def clean_weekday_text(self, weekday_text):
+        cleaned = []
+        for line in weekday_text:
+            normalized = unicodedata.normalize("NFKC", line)  # Normalize fancy spaces
+            cleaned.append(normalized)
+        return cleaned
 
     def extract_restaurant_info(self, restaurants_results):
         """
@@ -128,19 +149,46 @@ class GoogleMapSearch:
             restaurant_info = self.get_info_by_place_id(place_id)
 
             restaurant_name = restaurant_info.get("name", "N/A")
+            formatted_address = restaurant_info.get("formatted_address", "N/A")
+            location = restaurant_info.get("geometry", {}).get("location", {})
+            open_now = restaurant_info.get("current_opening_hours", {}).get("open_now", False)
+            periods = restaurant_info.get("current_opening_hours", {}).get("periods", False)
+            opening_hours_text = self.clean_weekday_text(restaurant_info.get("current_opening_hours", {}).get("weekday_text", []))
             price_level = restaurant_info.get("price_level", "N/A")
-            types = restaurant_info.get("types", [])
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
             vicinity = restaurant_info.get("vicinity", "N/A")
             rating = restaurant_info.get("rating", "N/A")
+            types = restaurant_info.get("types", [])
             website = restaurant_info.get("website", "N/A")
             phone_number = restaurant_info.get("formatted_phone_number", "N/A")
-            photos = self.get_place_photos(restaurant_info.get("photos", []))
+            raw_photos = restaurant_info.get("photos", [])
+            curbside_pickup = restaurant_info.get("curbside_pickup", False)
+            delivery = restaurant_info.get("delivery", False)
+            dine_in = restaurant_info.get("dine_in", False)
+            reservable = restaurant_info.get("reservable", False)
+            takeout = restaurant_info.get("takeout", False)
+            serves_breakfast = restaurant_info.get("serves_breakfast", False)
+            serves_lunch = restaurant_info.get("serves_lunch", False)
+            serves_dinner = restaurant_info.get("serves_dinner", False)
+            serves_brunch = restaurant_info.get("serves_brunch", False)
+            serves_vegetarian_food = restaurant_info.get("serves_vegetarian_food", False)
+            serves_beer = restaurant_info.get("serves_beer", False)
+            serves_wine = restaurant_info.get("serves_wine", False)
+            wheelchair_accessible = restaurant_info.get("wheelchair_accessible_entrance", False)
+            business_status = restaurant_info.get("business_status", "N/A")
+            editorial_summary = restaurant_info.get("editorial_summary", {}).get("overview", "")
+            # photos = self.get_place_photos(place_id, raw_photos)
+            photos = raw_photos
             reviews = restaurant_info.get("reviews", [])
             results.append(
                 {
                     "place_id": place_id,
                     "restaurant_name": restaurant_name,
+                    "formatted_address": formatted_address,
+                    "location": location,
+                    "open_now": open_now,
+                    "periods": periods,
+                    "opening_hours": opening_hours_text,
                     "price_level": price_level,
                     "rating": rating,
                     "types": types,
@@ -148,7 +196,22 @@ class GoogleMapSearch:
                     "vicinity": vicinity,
                     "website": website,
                     "phone_number": phone_number,
-                    "photos": photos, # list of photo html
+                    "photos": photos, # list of photos reference
+                    "curbside_pickup": curbside_pickup,
+                    "delivery": delivery,
+                    "dine_in": dine_in,
+                    "reservable": reservable,
+                    "takeout": takeout,
+                    "serves_breakfast": serves_breakfast,
+                    "serves_lunch": serves_lunch,
+                    "serves_dinner": serves_dinner,
+                    "serves_brunch": serves_brunch,
+                    "serves_vegetarian_food": serves_vegetarian_food,
+                    "serves_beer": serves_beer,
+                    "serves_wine": serves_wine,
+                    "wheelchair_accessible": wheelchair_accessible,
+                    "business_status": business_status,
+                    "editorial_summary": editorial_summary,
                     "reviews": reviews, # list of reviews
                 }
             )
