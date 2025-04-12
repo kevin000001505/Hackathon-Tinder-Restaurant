@@ -138,12 +138,12 @@ class GoogleMapSearch:
         results = []
         for restaurant in restaurants_results:
             place_id = restaurant.get("place_id")
+            vicinity = restaurant.get("vicinity", "N/A")
             restaurant_info = self.get_info_by_place_id(place_id)
 
             restaurant_name = restaurant_info.get("name", "N/A")
             price_level = restaurant_info.get("price_level", "N/A")
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
-            vicinity = restaurant_info.get("vicinity", "N/A")
             rating = restaurant_info.get("rating", "N/A")
             types = restaurant_info.get("types", [])
             website = restaurant_info.get("website", "N/A")
@@ -163,7 +163,7 @@ class GoogleMapSearch:
                     "vicinity": vicinity,
                     "website": website,
                     "phone_number": phone_number,
-                    "photos": photos, # list of photo html
+                    "photos": photos, # list of photos reference
                     "reviews": reviews, # list of reviews
                 }
             )
