@@ -166,7 +166,7 @@ class GoogleMapSearch:
         :return: A list of dictionaries containing restaurant information.
         """
         results = []
-        for restaurant in restaurants_results[:3]:
+        for restaurant in restaurants_results:
             place_id = restaurant.get("place_id")
             restaurant_info = self.get_info_by_place_id(place_id)
 
@@ -217,8 +217,23 @@ class GoogleMapSearch:
                     "vicinity": vicinity,
                     "website": website,
                     "phone_number": phone_number,
-                    "photos": photos, # list of photo urls
+                    "photos": photos, # list of photo 
                     "reviews": reviews, # list of reviews
+                    "curbside_pickup": curbside_pickup,
+                    "delivery": delivery,
+                    "dine_in": dine_in,
+                    "reservable": reservable,
+                    "takeout": takeout,
+                    "serves_breakfast": serves_breakfast,
+                    "serves_lunch": serves_lunch,
+                    "serves_dinner": serves_dinner,
+                    "serves_brunch": serves_brunch,
+                    "serves_vegetarian_food": serves_vegetarian_food,
+                    "serves_beer": serves_beer,
+                    "serves_wine": serves_wine,
+                    "wheelchair_accessible": wheelchair_accessible,
+                    "business_status": business_status,
+                    "editorial_summary": editorial_summary,
                 }
             )
         return results
