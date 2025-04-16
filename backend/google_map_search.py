@@ -83,7 +83,7 @@ class GoogleMapSearch:
             return image_urls
         
         logging.info(f"{photo_num} photos downloaded successfully.")
-        return None
+        return []
         
     
     def download_photo(self, place_id, photo_response, photo_num):

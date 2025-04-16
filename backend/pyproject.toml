@@ -6,7 +6,7 @@ authors = ["Cheng-Hsun, Hsu <a10121555@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 googlemaps = "^4.10.0"
 dotenv = "^0.9.9"
 black = "^25.1.0"
@@ -17,6 +17,7 @@ flask-cors = "^5.0.1"
 numpy = "^2.2.4"
 scikit-learn = "^1.6.1"
 pytest = "^8.3.5"
+kmodes = "^0.12.2"
 
 
 [build-system]

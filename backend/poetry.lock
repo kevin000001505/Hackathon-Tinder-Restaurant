@@ -763,6 +763,26 @@ docs = ["myst-parser", "pydata-sphinx-theme", "sphinx-autodoc-typehints", "sphin
 test = ["ipykernel", "pre-commit", "pytest (<8)", "pytest-cov", "pytest-timeout"]
 
 [[package]]
+name = "kmodes"
+version = "0.12.2"
+description = "Python implementations of the k-modes and k-prototypes clustering algorithms for clustering categorical data."
+optional = false
+python-versions = "*"
+files = [
+    {file = "kmodes-0.12.2-py2.py3-none-any.whl", hash = "sha256:b764f7166dd5fe63826135ed74df796693dc7c25fc2cb8a106e14f3bfb371004"},
+    {file = "kmodes-0.12.2.tar.gz", hash = "sha256:d840ac9f4616a668ebacba24a12ec1def87da24a9fd0a0dc2f7499a9b9a6f45b"},
+]
+
+[package.dependencies]
+joblib = ">=0.11"
+numpy = ">=1.10.4"
+scikit-learn = ">=0.22.0"
+scipy = ">=0.13.3"
+
+[package.extras]
+dev = ["pandas", "pytest", "pytest-cov"]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.2"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -2114,5 +2134,5 @@ watchdog = ["watchdog (>=2.3)"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.11"
-content-hash = "fe357cde9e68256f66788071e318e1fa448131cf9a8dd7ca6508063533552ce8"
+python-versions = ">=3.11,<3.13"
+content-hash = "e9ab738d6a53f890aab4fe0152f57b69dc1ff053e8dfa933d9c88e52b9c05b1f"
