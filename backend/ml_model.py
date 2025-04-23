@@ -74,31 +74,33 @@ class UserInterestPredictor:
             pd.DataFrame: Processed data with cluster assignments
         """
         # STEP 1: Preprocess the data for clustering
-        transformed_data = self.preprocess_data(clean_data)
+        processed_data = self.preprocess_data(clean_data)
 
         # STEP 2: Drop text columns that shouldn't be used for clustering
-        x_df = transformed_data.drop(columns=config.TEXT_COLUMNS)
-        X = x_df.values
+        features_df = processed_data.drop(columns=config.TEXT_COLUMNS)
+        feature_matrix = features_df.values
 
         # STEP 3: Identify categorical features for K-Prototypes algorithm
         # K-Prototypes requires explicit identification of categorical features
         categorical_indices = [
-            x_df.columns.get_loc(col) for col in config.CATEGORICAL_COLUMNS
+            features_df.columns.get_loc(col) for col in config.CATEGORICAL_COLUMNS
         ]
 
         # STEP 4: Perform clustering
-        clusters = self.kproto.fit_predict(X, categorical=categorical_indices)
+        cluster_labels = self.kproto.fit_predict(
+            feature_matrix, categorical=categorical_indices
+        )
 
         # STEP 5: Add place_id and cluster assignments back to the data
-        transformed_data["place_id"] = self.place_id_list
-        transformed_data["cluster"] = clusters
+        processed_data["place_id"] = self.place_id_list
+        processed_data["cluster"] = cluster_labels
 
         # Save the clustered data for later use
         os.makedirs("data", exist_ok=True)
-        transformed_data.to_csv("data/cluster_data.csv", index=False)
-        return transformed_data
+        processed_data.to_csv("data/cluster_data.csv", index=False)
+        return processed_data
 
-    def preprocess_data(self, json_list: List[dict]):
+    def preprocess_data(self, restaurant_data: List[dict]):
         """
         Preprocesses raw restaurant data for clustering.
 
@@ -106,29 +108,31 @@ class UserInterestPredictor:
         processes reviews, and handles special data types.
 
         Args:
-            json_list (List[dict]): Raw restaurant data
+            restaurant_data (List[dict]): Raw restaurant data
 
         Returns:
             pd.DataFrame: Processed data ready for clustering
         """
         # STEP 1: Convert json to DataFrame
-        df = pd.DataFrame(json_list)
+        restaurant_df = pd.DataFrame(restaurant_data)
 
         # STEP 2: One-hot encode restaurant types
-        df = self.one_hot_encode_types(df)
+        restaurant_df = self.one_hot_encode_types(restaurant_df)
 
         # Store place_ids for later reference
-        self.place_id_list = df["place_id"].tolist()
+        self.place_id_list = restaurant_df["place_id"].tolist()
 
         # STEP 3: Extract latitude and longitude from location
-        df["lat"] = df["location"].apply(lambda x: x["lat"])
-        df["lng"] = df["location"].apply(lambda x: x["lng"])
+        restaurant_df["lat"] = restaurant_df["location"].apply(lambda x: x["lat"])
+        restaurant_df["lng"] = restaurant_df["location"].apply(lambda x: x["lng"])
 
         # STEP 4: Process reviews into extended text
-        df["extended_reviews"] = df["reviews"].apply(lambda x: extract_review(x))
+        restaurant_df["extended_reviews"] = restaurant_df["reviews"].apply(
+            lambda x: extract_review(x)
+        )
 
         # STEP 5: Clean and transform the data
-        df_clean = df.drop(columns=config.DROP_COLUMNS, inplace=False).copy()
+        df_clean = restaurant_df.drop(columns=config.DROP_COLUMNS, inplace=False).copy()
 
         # Convert boolean columns to integers (1/0)
         bool_cols = df_clean.select_dtypes(include="boolean").columns
@@ -225,6 +229,6 @@ if __name__ == "__main__":
         data = json.load(json_file)
     # Get the clustering data
     user_interest_predictor.clustering(data)
-    cluster_data = pd.read_csv("cluster_data.csv")
+    cluster_data = pd.read_csv("data/cluster_data.csv")
     predictions = user_interest_predictor.predict(cluster_data, [data[0]])
     print(predictions)
