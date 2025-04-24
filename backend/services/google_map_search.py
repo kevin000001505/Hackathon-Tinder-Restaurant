@@ -1,6 +1,12 @@
-import time, os, threading, logging, googlemaps, unicodedata
+import os
+import sys
+
+import time, threading, logging, googlemaps, unicodedata
 from dotenv import load_dotenv
+from typing import List
 from datetime import datetime, timedelta
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
 load_dotenv()
@@ -11,7 +17,7 @@ GOOGLE_MAPS_API_KEY = None
 
 def validate_google_api_key() -> str:
     tries = 0
-    key_idx = 1
+    key_idx = 0
     api_key = os.getenv(f"GOOGLE_MAPS_API_KEY_{key_idx}")
     while api_key and tries < 10:
         try:
@@ -83,18 +89,17 @@ class GoogleMapSearch:
             ]
 
             # If photos are already cached, skipped downloading
-            if not os.path.isdir(f"photos/{place_id}"):
-                os.mkdir(f"photos/{place_id}")
-                for photo in raw_photos[:3]:
-                    photo_reference = photo.get("photo_reference", "")
-                    if photo_reference:
-                        photo_response = self.client.places_photo(
-                            photo_reference=photo_reference,
-                            max_width=400,
-                            max_height=400,
-                        )
-                        self.download_photo(place_id, photo_response, photo_num)
-                    photo_num += 1
+            os.makedirs(f"photos/{place_id}", exist_ok=True)
+            for photo in raw_photos[:3]:
+                photo_reference = photo.get("photo_reference", "")
+                if photo_reference:
+                    photo_response = self.client.places_photo(
+                        photo_reference=photo_reference,
+                        max_width=400,
+                        max_height=400,
+                    )
+                    self.download_photo(place_id, photo_response, photo_num)
+                photo_num += 1
 
             return image_urls
 
@@ -141,7 +146,7 @@ class GoogleMapSearch:
             )
         if int(radius) > 100000:
             raise ValueError(
-                "The radius must be less than 100,000 meters or we get no results."
+                "The radius must be less than 10,000 meters or we get no results."
             )
         else:
             restaurants_response = self.client.places_nearby(
@@ -186,7 +191,7 @@ class GoogleMapSearch:
             cleaned.append(normalized)
         return cleaned
 
-    def extract_restaurant_info(self, restaurants_results):
+    def extract_restaurant_info(self, restaurants_results) -> List[dict]:
         """
         Extract restaurant information from the response.
         :param restaurant_info: The response from the Google Maps API.
@@ -209,6 +214,7 @@ class GoogleMapSearch:
             opening_hours_text = self.clean_weekday_text(
                 restaurant_info.get("current_opening_hours", {}).get("weekday_text", [])
             )
+
             price_level = restaurant_info.get("price_level", "N/A")
             total_user_ratings = restaurant_info.get("user_ratings_total", "N/A")
             vicinity = restaurant_info.get("vicinity", "N/A")
@@ -281,10 +287,12 @@ class GoogleMapSearch:
 if __name__ == "__main__":
     gmaps = GoogleMapSearch()
     threading.Thread(target=gmaps.auto_cleanup_photos, daemon=True).start()
-    query = "Japanese restaurants"
-    location = {"lat": 38.8248377, "lng": -77.3209443}  # The Main Street, Virginia
-    radius = 5000  # 5 km
-    results = gmaps.get_nearby_restaurants(location, query, radius)
+    location = {"lat": 38.8235264, "lng": -77.299712}  # The Main Street, Virginia
+    radius = 10000  # 5 km
+    results, next_page_token = gmaps.get_nearby_restaurants(location, radius)
+    restaurants_result = gmaps.extract_restaurant_info(results)
 
-    for place in results:
-        print(f"Name: {place['name']}, Address: {place.get('vicinity', 'N/A')}")
+    for place in restaurants_result:
+        print(
+            f"Name: {place['restaurant_name']}, Address: {place.get('vicinity', 'N/A')}"
+        )
