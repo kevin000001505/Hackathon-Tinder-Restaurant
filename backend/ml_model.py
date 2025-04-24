@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import logging
 import os
 from typing import List
 
@@ -32,20 +33,20 @@ class UserInterestPredictor:
         """
         self.kproto = KPrototypes(n_clusters=4, init="Cao", verbose=1)
 
-    def predict(self, cluster_data: pd.DataFrame, user_data: List[dict]):
+    def predict(self, cluster_data: pd.DataFrame, target_place_id: list):
         """
         Predicts restaurants that might interest a user based on their previous choices.
 
         Args:
             cluster_data (pd.DataFrame): Pre-clustered restaurant data
-            user_data (List[dict]): User's previously liked restaurants
+            target_place_id (list): User's previously liked restaurants ids
 
         Returns:
             pd.DataFrame: Filtered and ranked restaurant recommendations
         """
         # User like the restaurant -> get the cluster
-        if user_data:
-            place_ids = tools.extract_all_place_ids(user_data)
+        if target_place_id:
+            place_ids = target_place_id
             # STEP 1: Find which cluster the user's liked restaurant belongs to
             target_label_dict = cluster_data[cluster_data["place_id"].isin(place_ids)][
                 "cluster"
@@ -53,12 +54,11 @@ class UserInterestPredictor:
 
             # STEP 2: Filter restaurants from the same cluster (excluding the already liked one)
             filter_cluster = cluster_data[
-                (cluster_data["cluster"].isin(target_label_dict.keys())) &
-                (~cluster_data["place_id"].isin(place_ids))
+                cluster_data["cluster"].isin(target_label_dict.keys())
             ]
 
             # STEP 3: Rank the filtered restaurants based on similarity
-            rank_data = self.rank(filter_cluster, user_data)
+            rank_data = self.rank(filter_cluster, target_place_id)
             top_5_resataurants = tools.top_5_restaurants(
                 rank_data, target_label_dict
             )
@@ -67,18 +67,18 @@ class UserInterestPredictor:
             # If no user preferences exist, return all restaurants
             return cluster_data
 
-    def clustering(self, clean_data):
+    def clustering(self, restaurants_data) -> pd.DataFrame:
         """
         Performs clustering on restaurant data to group similar restaurants.
 
         Args:
-            clean_data (List[dict]): List of restaurant data dictionaries
+            restaurants_data (List[dict]): List of restaurant data dictionaries
 
         Returns:
             pd.DataFrame: Processed data with cluster assignments
         """
         # STEP 1: Preprocess the data for clustering
-        processed_data = self.preprocess_data(clean_data)
+        processed_data = self.preprocess_data(restaurants_data)
 
         # STEP 2: Drop text columns that shouldn't be used for clustering
         features_df = processed_data.drop(columns=config.TEXT_COLUMNS)
@@ -87,9 +87,10 @@ class UserInterestPredictor:
         # STEP 3: Identify categorical features for K-Prototypes algorithm
         # K-Prototypes requires explicit identification of categorical features
         categorical_indices = [
-            features_df.columns.get_loc(col) for col in config.CATEGORICAL_COLUMNS
+            features_df.columns.get_loc(col)
+            for col in config.CATEGORICAL_COLUMNS
+            if col in features_df.columns
         ]
-
         # STEP 4: Perform clustering
         cluster_labels = self.kproto.fit_predict(
             feature_matrix, categorical=categorical_indices
@@ -98,10 +99,10 @@ class UserInterestPredictor:
         # STEP 5: Add place_id and cluster assignments back to the data
         processed_data["place_id"] = self.place_id_list
         processed_data["cluster"] = cluster_labels
+        logging.info(
+            f"Clustering completed with {len(set(cluster_labels))} clusters."
+        )
 
-        # Save the clustered data for later use
-        os.makedirs("data", exist_ok=True)
-        processed_data.to_csv("data/cluster_data.csv", index=False)
         return processed_data
 
     def preprocess_data(self, restaurant_data: List[dict]):
@@ -146,6 +147,10 @@ class UserInterestPredictor:
         df_clean["price_level"] = df_clean["price_level"].map(
             lambda x: int(x) if x != "N/A" else 3
         )
+        # Replace N/A with medium rating (3)
+        df_clean["rating"] = df_clean["rating"].map(
+            lambda x: float(x) if x != "N/A" else 3
+        )
 
         return df_clean
 
@@ -183,7 +188,7 @@ class UserInterestPredictor:
 
         return df
 
-    def rank(self, data: pd.DataFrame, user_data: List[dict]):
+    def rank(self, data: pd.DataFrame, target_place_id: list):
         """
         Ranks restaurants based on similarity to user preferences.
 
@@ -192,19 +197,22 @@ class UserInterestPredictor:
 
         Args:
             data (pd.DataFrame): Filtered restaurant data from the same cluster
-            user_data (List[dict]): User's previously liked restaurants
+            user_data (list): User's previously liked restaurants
 
         Returns:
             pd.DataFrame: Restaurants sorted by similarity to user preferences
         """
         cosine_similarity_list = []
+        user_data = data[data["place_id"].isin(target_place_id)]
+        filter_data = data[~data["place_id"].isin(target_place_id)]
 
         # STEP 1: Get embeddings from the reviews of the user's liked restaurant
-        target_reviews = tools.extract_review(user_data)
+        print("User data:", user_data['extended_reviews'])
+        target_reviews = tools.extract_review(user_data["extended_reviews"])
         target_reviews_embedding = tools.get_vector(target_reviews)
 
         # STEP 2: Calculate similarity between target restaurant and each potential recommendation
-        for reviews in data["extended_reviews"]:
+        for reviews in filter_data["extended_reviews"]:
             reviews_embedding = tools.get_vector(reviews)
             # Calculate cosine similarity between review embeddings
             # Higher value means more similar content
@@ -213,11 +221,11 @@ class UserInterestPredictor:
             )
 
         # STEP 3: Add similarity scores to the dataframe and sort
-        data = data.copy()  # Create a copy to avoid SettingWithCopyWarning
-        data["similarity"] = cosine_similarity_list
+        filter_data = filter_data.copy()  # Create a copy to avoid SettingWithCopyWarning
+        filter_data["similarity"] = cosine_similarity_list
 
         # Return restaurants sorted by descending similarity (most similar first)
-        return data.sort_values(by="similarity", ascending=False)
+        return filter_data.sort_values(by="similarity", ascending=False)
 
 
 if __name__ == "__main__":
@@ -234,5 +242,6 @@ if __name__ == "__main__":
     # Get the clustering data
     user_interest_predictor.clustering(data)
     cluster_data = pd.read_csv("data/cluster_data.csv").fillna("")
+    breakpoint()
     predictions = user_interest_predictor.predict(cluster_data, data[0:5])
     print(predictions)
