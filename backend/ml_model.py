@@ -12,7 +12,8 @@ from kmodes.kprototypes import KPrototypes
 # Import the config file
 import config
 
-from utils.helpers import extract_review, get_vector
+from utils.helpers import Tools
+tools = Tools()
 
 
 class UserInterestPredictor:
@@ -44,21 +45,24 @@ class UserInterestPredictor:
         """
         # User like the restaurant -> get the cluster
         if user_data:
-            place_id = user_data[0]["place_id"]
+            place_ids = tools.extract_all_place_ids(user_data)
             # STEP 1: Find which cluster the user's liked restaurant belongs to
-            target_label = cluster_data[cluster_data["place_id"] == place_id][
+            target_label_dict = cluster_data[cluster_data["place_id"].isin(place_ids)][
                 "cluster"
-            ].values[0]
+            ].value_counts().to_dict()
 
             # STEP 2: Filter restaurants from the same cluster (excluding the already liked one)
             filter_cluster = cluster_data[
-                (cluster_data["cluster"] == target_label)
-                & (cluster_data["place_id"] != place_id)
+                (cluster_data["cluster"].isin(target_label_dict.keys())) &
+                (~cluster_data["place_id"].isin(place_ids))
             ]
 
             # STEP 3: Rank the filtered restaurants based on similarity
             rank_data = self.rank(filter_cluster, user_data)
-            return rank_data
+            top_5_resataurants = tools.top_5_restaurants(
+                rank_data, target_label_dict
+            )
+            return top_5_resataurants
         else:
             # If no user preferences exist, return all restaurants
             return cluster_data
@@ -128,7 +132,7 @@ class UserInterestPredictor:
 
         # STEP 4: Process reviews into extended text
         restaurant_df["extended_reviews"] = restaurant_df["reviews"].apply(
-            lambda x: extract_review(x)
+            lambda x: tools.extract_review(x)
         )
 
         # STEP 5: Clean and transform the data
@@ -196,12 +200,12 @@ class UserInterestPredictor:
         cosine_similarity_list = []
 
         # STEP 1: Get embeddings from the reviews of the user's liked restaurant
-        target_reviews = extract_review(user_data[0]["reviews"])
-        target_reviews_embedding = get_vector(target_reviews)
+        target_reviews = tools.extract_review(user_data)
+        target_reviews_embedding = tools.get_vector(target_reviews)
 
         # STEP 2: Calculate similarity between target restaurant and each potential recommendation
         for reviews in data["extended_reviews"]:
-            reviews_embedding = get_vector(reviews)
+            reviews_embedding = tools.get_vector(reviews)
             # Calculate cosine similarity between review embeddings
             # Higher value means more similar content
             cosine_similarity_list.append(
@@ -229,6 +233,6 @@ if __name__ == "__main__":
         data = json.load(json_file)
     # Get the clustering data
     user_interest_predictor.clustering(data)
-    cluster_data = pd.read_csv("data/cluster_data.csv")
-    predictions = user_interest_predictor.predict(cluster_data, [data[0]])
+    cluster_data = pd.read_csv("data/cluster_data.csv").fillna("")
+    predictions = user_interest_predictor.predict(cluster_data, data[0:5])
     print(predictions)
