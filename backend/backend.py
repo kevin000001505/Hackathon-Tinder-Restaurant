@@ -3,6 +3,7 @@ from services.google_map_search import GoogleMapSearch
 from flask_cors import CORS
 from utils.helpers import Tools
 from utils.data_transport import FirebaseClient
+from utils.session import Session
 from services.restaurant_service import search_nearby_restaurants
 from ml_model import UserInterestPredictor
 import pandas as pd
@@ -11,13 +12,73 @@ import logging
 import os
 
 app = Flask(__name__)
+CORS(app, origins=["http://localhost:5173","http://127.0.0.1:5173"], supports_credentials=True)
+session = Session()
+
 gmaps = GoogleMapSearch()
 last_info = {}
-CORS(app)
 tools = Tools()
 firebase_client = FirebaseClient()
 model = UserInterestPredictor()
 
+# Dummy user
+USER = {
+    'username': 'user',
+    'password': 'pass'
+}
+
+@app.before_request
+def before_request():
+    """Perform actions before each request."""
+    if request.endpoint in ['login', 'static', 'check-session']:  # Exclude login and static routes
+        return  # Allow access to login and static files without session check
+
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        logging.info("Session ID not found in cookie")
+        return jsonify({'message': 'Not authenticated'}), 401
+
+    session_data = session.get_session_data(session_id)
+    if not session_data:
+        logging.info(f"Invalid session ID: {session_id}")
+        return jsonify({'message': 'Invalid session. Please log in.'}), 401
+    
+@app.route('/check-session', methods=['GET'])
+def check_session():
+    """Check if the user has a valid session."""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        logging.info("Session ID not found in cookie")
+        return jsonify({'message': 'Not authenticated'}), 401
+    session_data = session.get_session_data(session_id)
+    if session_data:
+        logging.info(f"Session is valid")
+        return jsonify({'message': 'Session is valid'}), 200
+    else:
+        logging.info("Session is invalid or expired")
+        return jsonify({'message': 'Not authenticated'}), 401
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Handle user login."""
+    data = request.get_json()
+    if data['username'] == USER['username'] and data['password'] == USER['password']:
+        session_id = session.create_session(data['username'])
+        response = jsonify({'message': 'Login successful'})
+        response.set_cookie('session_id', session_id, httponly=True, samesite='Lax')
+        return response, 200
+    return jsonify({'message': 'Invalid credentials'}), 401
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    """Handle user logout."""
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        session.delete_session(session_id)
+        response = jsonify({'message': 'Logged out'})
+        response.delete_cookie('session_id')
+        return response, 200
+    return jsonify({'message': 'No session to log out from'}), 200
 
 @app.route("/search", methods=["GET"])
 def search_restaurants():
@@ -58,10 +119,7 @@ def search_restaurants():
         threading.Thread(target=background_processing).start()
 
     # Return response immediately
-    return (
-        jsonify({"results": results, "next_page_token": next_page_token}),
-        status_code,
-    )
+    return jsonify({"results": results, "next_page_token": next_page_token}), 200
 
 
 @app.route("/search/more", methods=["GET"])
