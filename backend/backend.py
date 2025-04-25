@@ -25,10 +25,10 @@ USER = {
     'username': 'user',
     'password': 'pass'
 }
-
+"""
 @app.before_request
 def before_request():
-    """Perform actions before each request."""
+    #Perform actions before each request.
     if request.endpoint in ['login', 'static', 'check-session']:  # Exclude login and static routes
         return  # Allow access to login and static files without session check
 
@@ -41,7 +41,7 @@ def before_request():
     if not session_data:
         logging.info(f"Invalid session ID: {session_id}")
         return jsonify({'message': 'Invalid session. Please log in.'}), 401
-    
+"""
 @app.route('/check-session', methods=['GET'])
 def check_session():
     """Check if the user has a valid session."""
