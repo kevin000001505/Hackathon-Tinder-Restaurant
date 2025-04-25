@@ -13,7 +13,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { isAuthenticated } from '@/router/index.js'; // Import from router/index.js
+import { isAuthenticated, userId } from '@/router/index.js'; // Import from router/index.js
 
 const username = ref('');
 const password = ref('');
@@ -35,6 +35,7 @@ const login = async () => {
 
     if (res.ok) {
       isAuthenticated.value = true;
+      userId.value = username.value;
       console.log('Login successful. About to push /');
       router.push('/');
     } else {

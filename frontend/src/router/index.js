@@ -3,7 +3,8 @@ import { ref } from 'vue'
 import LoginPage from '@/views/LoginPage.vue'
 import AppPage from '@/views/AppPage.vue'
 
-const isAuthenticated = ref(false)
+const isAuthenticated = ref(false);
+const userId = ref('');
 
 function clearAuth(router) {
   isAuthenticated.value = false;
@@ -54,5 +55,5 @@ router.beforeEach(async (to, from, next) => {
   }
 });
 
-export { router, isAuthenticated, clearAuth }
+export { router, isAuthenticated, clearAuth, userId }
 export default router

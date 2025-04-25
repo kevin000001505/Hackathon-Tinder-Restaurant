@@ -7,12 +7,6 @@
                 <Slider v-model="distance" min="5" max="50"/>
             </template>
         </Card>
-        <Card>
-            <template #title>Price {{ priceDisplay }}</template>
-            <template #content>
-                <Slider v-model="price" :min="1" :max="4" :step="1"/>
-            </template>
-        </Card>
     </Drawer>
     <div class="flex w-dvw h-dvh justify-center">
         <div class="flex flex-col w-7/10 h-full">
@@ -33,21 +27,28 @@
                     <Skeleton v-if="loading" height="2rem" class="mb-2"></Skeleton>
                     <Skeleton v-if="loading" width="10rem" height="4rem"></Skeleton>
                     <div v-else>
-                        <h1>{{ r_name }}</h1>
-                        <p>{{ r_addr }}</p>
-                        <p>{{ r_price }} | {{ r_rating }}</p>
-                        <p>{{ r_phone }}</p>
+                        <h1><span class="material-icons">storefront</span>{{ r_name }}</h1>
+                        <p><span class="material-icons">location_on</span>{{ r_addr }}</p>
+                        <p><span class="material-icons">attach_money</span>{{ r_price }} | <span class="material-icons">star</span>{{ r_rating }}</p>
+                        <p><span class="material-icons">call</span>{{ r_phone }}</p>
                         <p>{{ r_summary }}</p>
-                        <p>{{ r_hours }}</p>
+                        <p><span class="material-icons">local_convenience_store</span></p>
+                        <p>{{ r_hours[0] }}</p>
+                        <p>{{ r_hours[1] }}</p>
+                        <p>{{ r_hours[2] }}</p>
+                        <p>{{ r_hours[3] }}</p>
+                        <p>{{ r_hours[4] }}</p>
+                        <p>{{ r_hours[5] }}</p>
+                        <p>{{ r_hours[6] }}</p>
                     </div>
                 </ScrollPanel>
             </div>
             <div class="flex justify-center max-h-1/10">
                 <div class="flex gap-x-[5vw]">
                     <Button raised rounded @click="drawer = true"><span class="material-icons">menu</span></Button>
-                    <Button raised rounded @click="drawer = true"><span class="material-icons">close</span></Button>
+                    <Button raised rounded @click="dislike"><span class="material-icons">close</span></Button>
                     <Button raised rounded @click="drawer = true"><span class="material-icons">search</span></Button>
-                    <Button raised rounded @click="drawer = true"><span class="material-icons">favorite</span></Button>
+                    <Button raised rounded @click="like"><span class="material-icons">favorite</span></Button>
                     <Button raised rounded @click="drawer = true"><span class="material-icons">info</span></Button>
                 </div>
             </div>
@@ -65,7 +66,51 @@ import ProgressBar from 'primevue/progressbar';
 import ProgressSpinner from 'primevue/progressspinner';
 import Skeleton from 'primevue/skeleton';
 import { ref, computed, onMounted } from "vue";
+import { userId } from '@/router/index.js';
 
+const latitude = ref(38.85283523403844);
+const longitude = ref(-77.33180841736046);
+const locationError = ref('');
+
+const getLocation = () => {
+  locationError.value = '';
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        latitude.value = position.coords.latitude;
+        longitude.value = position.coords.longitude;
+        console.log('Latitude:', latitude.value, 'Longitude:', longitude.value);
+      },
+      (error) => {
+        handleLocationError(error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  }
+};
+
+const handleLocationError = (error) => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        locationError.value = 'User denied the request for Geolocation.';
+        break;
+      case error.POSITION_UNAVAILABLE:
+        locationError.value = 'Location information is unavailable.';
+        break;
+      case error.TIMEOUT:
+        locationError.value = 'The request to get user location timed out.';
+        break;
+      default:
+        locationError.value = 'An unknown error occurred.';
+    }
+}
+
+const likes = ref([]);
+const dislikes = ref([]);
 const restaurant_index = ref(0);
 const restaurants_info = ref();
 const r_name = ref();
@@ -78,13 +123,17 @@ const r_hours = ref();
 const backend_url = 'http://127.0.0.1:5000/'
 async function getRestaurantsInfo() {
     loading.value = true;
-    const response = await fetch(`${backend_url}search?lat=38.85283523403844&lng=-77.33180841736046`, {
+    getLocation();
+    const response = await fetch(`${backend_url}search?lat=${latitude.value}&lng=${longitude.value}&radius=${distance.value * 1000}?user_id=${userId.value}`, {
         method: 'GET',
         credentials: 'include',
     });
     let restaurants = await response.json();
     restaurants_info.value = restaurants.results;
-    console.log(restaurants_info.value);
+    displayRestaurantInfo();
+}
+
+function displayRestaurantInfo() {
     r_name.value = restaurants_info.value[restaurant_index.value].restaurant_name;
     r_addr.value = restaurants_info.value[restaurant_index.value].formatted_address;
     r_price.value = restaurants_info.value[restaurant_index.value].price_level;
@@ -93,6 +142,41 @@ async function getRestaurantsInfo() {
     r_summary.value = restaurants_info.value[restaurant_index.value].editorial_summary;
     r_hours.value = restaurants_info.value[restaurant_index.value].opening_hours;
     getRestaurantPhotos(restaurants_info.value[restaurant_index.value].place_id)
+}
+
+const interact_counter = ref(0);
+
+async function send_preferences() {
+    if (interact_counter.value % 5 == 0) {
+        const response = await fetch(`${backend_url}suggestion`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: userId.value,
+                like_place_id: likes.value,
+                dislike_place_id: dislikes.value,
+            }),
+        })
+        console.log(response.results)
+    }
+}
+async function like() {
+    interact_counter.value++;
+    send_preferences();
+    likes.value.push(placeID.value);
+    restaurant_index.value++;
+    displayRestaurantInfo();
+}
+
+async function dislike() {
+    interact_counter.value++;
+    send_preferences();
+    dislikes.value.push(placeID.value);
+    restaurant_index.value++;
+    displayRestaurantInfo();
 }
 
 const loading = ref(true);
@@ -150,6 +234,9 @@ async function getRestaurantPhotos(place_id) {
         placeID.value = place_id;
         imageID.value = 0;
         stepCounter.value = 0;
+        progress0.value = 0;
+        progress1.value = 0;
+        progress2.value = 0;
         imageURLs = [
             backend_url + 'photos/' + placeID.value + '/0',
             backend_url + 'photos/' + placeID.value + '/1',
@@ -188,8 +275,6 @@ onMounted(() => {
 
 const drawer = ref(false);
 const distance = ref(15);
-const price = ref(2);
-const priceDisplay = computed(() => '$'.repeat(price.value));
 </script>
 
 <style>

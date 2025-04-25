@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
 from services.google_map_search import GoogleMapSearch
 from flask_cors import CORS
 from utils.helpers import Tools
@@ -155,6 +155,13 @@ def search_restaurants():
 
 @app.route("/suggestion", methods=["POST"])
 def get_suggestion():
+    response = make_response("Creating suggestions", 200)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    if request.method == 'OPTIONS':
+        return response
     try:
         data = request.json
         app.logger.info(f"Received data: {data}")
