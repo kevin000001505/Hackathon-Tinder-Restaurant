@@ -33,20 +33,20 @@ class UserInterestPredictor:
         """
         self.kproto = KPrototypes(n_clusters=4, init="Cao", verbose=1)
 
-    def predict(self, cluster_data: pd.DataFrame, target_place_id: list):
+    def predict(self, cluster_data: pd.DataFrame, like_place_id: list):
         """
         Predicts restaurants that might interest a user based on their previous choices.
 
         Args:
             cluster_data (pd.DataFrame): Pre-clustered restaurant data
-            target_place_id (list): User's previously liked restaurants ids
+            like_place_id (list): User's previously liked restaurants ids
 
         Returns:
             pd.DataFrame: Filtered and ranked restaurant recommendations
         """
         # User like the restaurant -> get the cluster
-        if target_place_id:
-            place_ids = target_place_id
+        if like_place_id:
+            place_ids = like_place_id
             # STEP 1: Find which cluster the user's liked restaurant belongs to
             target_label_dict = cluster_data[cluster_data["place_id"].isin(place_ids)][
                 "cluster"
@@ -58,7 +58,7 @@ class UserInterestPredictor:
             ]
 
             # STEP 3: Rank the filtered restaurants based on similarity
-            rank_data = self.rank(filter_cluster, target_place_id)
+            rank_data = self.rank(filter_cluster, like_place_id)
             top_5_resataurants = tools.top_5_restaurants(
                 rank_data, target_label_dict
             )
@@ -188,7 +188,7 @@ class UserInterestPredictor:
 
         return df
 
-    def rank(self, data: pd.DataFrame, target_place_id: list):
+    def rank(self, data: pd.DataFrame, like_place_id: list):
         """
         Ranks restaurants based on similarity to user preferences.
 
@@ -203,8 +203,8 @@ class UserInterestPredictor:
             pd.DataFrame: Restaurants sorted by similarity to user preferences
         """
         cosine_similarity_list = []
-        user_data = data[data["place_id"].isin(target_place_id)]
-        filter_data = data[~data["place_id"].isin(target_place_id)]
+        user_data = data[data["place_id"].isin(like_place_id)]
+        filter_data = data[~data["place_id"].isin(like_place_id)]
 
         # STEP 1: Get embeddings from the reviews of the user's liked restaurant
         target_reviews = user_data["extended_reviews"].str.cat(sep=' ')
