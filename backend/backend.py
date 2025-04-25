@@ -107,7 +107,8 @@ def get_suggestion():
         app.logger.info(f"Received data: {data}")
         
         # Get user liked restaurant IDs
-        place_ids = data.get("place_ids", [])
+        like_place_id = data.get("like_place_id", [])
+        dislike_place_id = data.get("dislike_place_id", [])
         user_id = data.get("user_id")
         
         if not user_id:
@@ -119,7 +120,7 @@ def get_suggestion():
             return jsonify({"error": "No data found for user"}), 404
 
         cluster_data = pd.DataFrame(cluster_data)
-        suggestion = model.predict(cluster_data, place_ids)
+        suggestion = model.predict(cluster_data, like_place_id, dislike_place_id)
         return jsonify({"suggestion": suggestion.to_dict(orient="records")}), 200
     except Exception as e:
         app.logger.error(f"Error in get_suggestion: {str(e)}", exc_info=True)

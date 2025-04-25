@@ -23,7 +23,7 @@ class Tools:
             raise ValueError("Invalid review format. Not a list or dict.")
 
     def get_vector(self, texts: str) -> np.ndarray:
-        if len(texts)>0:
+        if len(texts) > 0:
             return embedding(texts).vector
         return np.zeros(embedding.vocab.vectors.shape[1])
 
@@ -37,13 +37,26 @@ class Tools:
                 result.add(item["place_id"])
         return list(result)
 
-    def top_5_restaurants(self, data: pd.DataFrame, labels_score: dict) -> pd.DataFrame:
+    def upadate_cluster_weights(
+        self, whole_dict: dict, like_dict: dict, dislike_dict: dict
+    ) -> dict:
         """
-        Combine the restaurant data with their corresponding scores and sort them.
+        Update the cluster weights based on user preferences.
         """
-        data["final_score"] = data["cluster"].map(labels_score) + data["similarity"]
-        data = data.sort_values(by="final_score", ascending=False)
-        return data[:5]
+        for cluster in whole_dict:
+            if cluster in like_dict:
+                whole_dict[cluster] += 1
+            if cluster in dislike_dict:
+                whole_dict[cluster] -= 1
+        return whole_dict
+
+    def get_place_id_data(
+        self, data: pd.DataFrame, place_id_list: List[str]
+    ) -> pd.DataFrame:
+        """
+        Get the data for a specific place_id.
+        """
+        return data[data["place_id"].isin(place_id_list)]
 
     def get_locations(self, lat: float, lng: float, radius=100000) -> dict:
         """

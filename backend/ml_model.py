@@ -14,6 +14,7 @@ from kmodes.kprototypes import KPrototypes
 import config
 
 from utils.helpers import Tools
+
 tools = Tools()
 
 
@@ -33,39 +34,50 @@ class UserInterestPredictor:
         """
         self.kproto = KPrototypes(n_clusters=4, init="Cao", verbose=1)
 
-    def predict(self, cluster_data: pd.DataFrame, target_place_id: list):
+    def predict(
+        self, cluster_data: pd.DataFrame, like_place_id: list, dislike_place_id: list
+    ):
         """
         Predicts restaurants that might interest a user based on their previous choices.
 
         Args:
             cluster_data (pd.DataFrame): Pre-clustered restaurant data
-            target_place_id (list): User's previously liked restaurants ids
+            like_place_id (list): User's previously liked restaurants ids
+            dislike_place_id (list): User's previously disliked restaurants ids
 
         Returns:
             pd.DataFrame: Filtered and ranked restaurant recommendations
         """
-        # User like the restaurant -> get the cluster
-        if target_place_id:
-            place_ids = target_place_id
-            # STEP 1: Find which cluster the user's liked restaurant belongs to
-            target_label_dict = cluster_data[cluster_data["place_id"].isin(place_ids)][
-                "cluster"
-            ].value_counts().to_dict()
-
-            # STEP 2: Filter restaurants from the same cluster (excluding the already liked one)
-            filter_cluster = cluster_data[
-                cluster_data["cluster"].isin(target_label_dict.keys())
-            ]
-
-            # STEP 3: Rank the filtered restaurants based on similarity
-            rank_data = self.rank(filter_cluster, target_place_id)
-            top_5_resataurants = tools.top_5_restaurants(
-                rank_data, target_label_dict
+        cluster_weights_dict = {
+            str(cluster): 0 for cluster in cluster_data["cluster"].unique()
+        }
+        if like_place_id:
+            like_cluster_values_counts = (
+                tools.get_place_id_data(data=cluster_data, place_id_list=like_place_id)[
+                    "cluster"
+                ]
+                .value_counts()
+                .to_dict()
             )
-            return top_5_resataurants
-        else:
-            # If no user preferences exist, return all restaurants
-            return cluster_data
+            for cluster, count in like_cluster_values_counts.items():
+                cluster_weights_dict[str(cluster)] = count
+
+        if dislike_place_id:
+            dislike_cluster_values_counts = (
+                tools.get_place_id_data(
+                    data=cluster_data, place_id_list=dislike_place_id
+                )["cluster"]
+                .value_counts()
+                .to_dict()
+            )
+            for cluster, count in dislike_cluster_values_counts.items():
+                cluster_weights_dict[str(cluster)] -= count
+
+        # STEP 3: Rank the filtered restaurants based on similarity
+        rank_data = self.rank(
+            cluster_data, cluster_weights_dict, like_place_id, dislike_place_id
+        )
+        return rank_data
 
     def clustering(self, restaurants_data) -> pd.DataFrame:
         """
@@ -99,9 +111,7 @@ class UserInterestPredictor:
         # STEP 5: Add place_id and cluster assignments back to the data
         processed_data["place_id"] = self.place_id_list
         processed_data["cluster"] = cluster_labels
-        logging.info(
-            f"Clustering completed with {len(set(cluster_labels))} clusters."
-        )
+        logging.info(f"Clustering completed with {len(set(cluster_labels))} clusters.")
 
         return processed_data
 
@@ -188,43 +198,91 @@ class UserInterestPredictor:
 
         return df
 
-    def rank(self, data: pd.DataFrame, target_place_id: list):
+    def rank(
+        self,
+        data: pd.DataFrame,
+        cluster_weights_dict: dict,
+        like_place_id: list,
+        dislike_place_id: list,
+    ) -> pd.DataFrame:
         """
-        Ranks restaurants based on similarity to user preferences.
+        Ranks restaurants based on similarity to user preferences and cluster weights.
 
-        Uses cosine similarity between review embeddings to determine
-        how similar restaurants are to the user's liked restaurants.
+        This function computes relevance scores for candidate restaurants by:
+        1. Calculating semantic similarity between restaurant reviews using cosine similarity
+        2. Balancing positive preferences (likes) against negative preferences (dislikes)
+        3. Incorporating cluster weights based on user preference distribution
+        4. Creating a final composite score for ranking
 
         Args:
-            data (pd.DataFrame): Filtered restaurant data from the same cluster
-            user_data (list): User's previously liked restaurants
+            data (pd.DataFrame): Complete restaurant dataset with cluster assignments
+            cluster_weights_dict (dict): Weights for each cluster based on user preferences
+            like_place_id (list): List of place IDs the user has liked
+            dislike_place_id (list): List of place IDs the user has disliked
 
         Returns:
-            pd.DataFrame: Restaurants sorted by similarity to user preferences
+            pd.DataFrame: Restaurants sorted by final score in descending order
         """
-        cosine_similarity_list = []
-        user_data = data[data["place_id"].isin(target_place_id)]
-        filter_data = data[~data["place_id"].isin(target_place_id)]
+        # Initialize similarity score lists for both liked and disliked restaurants
+        like_cosine_similarity_list = []
+        dislike_cosine_similarity_list = []
 
-        # STEP 1: Get embeddings from the reviews of the user's liked restaurant
-        target_reviews = user_data["extended_reviews"].str.cat(sep=' ')
-        target_reviews_embedding = tools.get_vector(target_reviews)
+        # Extract subsets of data for liked and disliked restaurants
+        like_data = tools.get_place_id_data(data, like_place_id)
+        dislike_data = tools.get_place_id_data(data, dislike_place_id)
 
-        # STEP 2: Calculate similarity between target restaurant and each potential recommendation
+        # FILTERING STEP: Remove restaurants that the user has already rated
+        filter_data = data[~data["place_id"].isin(like_place_id + dislike_place_id)]
+
+        # EMBEDDING GENERATION: Create text embeddings from concatenated reviews
+        like_reviews = like_data["extended_reviews"].str.cat(sep=" ")
+        like_reviews_embedding = tools.get_vector(like_reviews)
+
+        dislike_reviews = dislike_data["extended_reviews"].str.cat(sep=" ")
+        dislike_reviews_embedding = tools.get_vector(dislike_reviews)
+
+        # SIMILARITY CALCULATION: Compute similarity scores for each candidate restaurant
         for reviews in filter_data["extended_reviews"]:
             reviews_embedding = tools.get_vector(reviews)
-            # Calculate cosine similarity between review embeddings
-            # Higher value means more similar content
-            cosine_similarity_list.append(
-                cosine_similarity([target_reviews_embedding], [reviews_embedding])[0][0]
+
+            # Calculate positive similarity (to liked restaurants)
+            # Higher values indicate stronger match to user preferences
+            like_cosine_similarity_list.append(
+                cosine_similarity([like_reviews_embedding], [reviews_embedding])[0][0]
             )
 
-        # STEP 3: Add similarity scores to the dataframe and sort
-        filter_data = filter_data.copy()  # Create a copy to avoid SettingWithCopyWarning
-        filter_data["similarity"] = cosine_similarity_list
+            # Calculate negative similarity (to disliked restaurants)
+            # Higher values indicate similarity to what user dislikes
+            dislike_cosine_similarity_list.append(
+                cosine_similarity([dislike_reviews_embedding], [reviews_embedding])[0][
+                    0
+                ]
+            )
+
+        # Create a copy to avoid pandas warning
+        filter_data = filter_data.copy()
+
+        # SCORE COMPUTATION: Calculate net similarity score
+        # Subtracting dislike similarity from like similarity to balance preferences
+        filter_data["similarity"] = (
+            np.array(like_cosine_similarity_list) * 100
+            - np.array(dislike_cosine_similarity_list) * 100
+        ).tolist()
+
+        # Store individual similarity components for analysis
+        filter_data["positive_similarity"] = like_cosine_similarity_list
+        filter_data["negative_similarity"] = dislike_cosine_similarity_list
+
+        # FINAL RANKING: Combine cluster weights with similarity scores
+        # This creates a composite score that considers both content similarity
+        # and cluster-based user preference patterns
+        filter_data["final_score"] = (
+            filter_data["cluster"].astype(str).map(cluster_weights_dict)
+            + filter_data["similarity"]
+        )
 
         # Return restaurants sorted by descending similarity (most similar first)
-        return filter_data.sort_values(by="similarity", ascending=False)
+        return filter_data.sort_values(by="final_score", ascending=False)
 
 
 if __name__ == "__main__":
