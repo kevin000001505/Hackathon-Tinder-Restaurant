@@ -283,16 +283,3 @@ class GoogleMapSearch:
             )
         return results
 
-
-if __name__ == "__main__":
-    gmaps = GoogleMapSearch()
-    threading.Thread(target=gmaps.auto_cleanup_photos, daemon=True).start()
-    location = {"lat": 38.8235264, "lng": -77.299712}  # The Main Street, Virginia
-    radius = 10000  # 5 km
-    results, next_page_token = gmaps.get_nearby_restaurants(location, radius)
-    restaurants_result = gmaps.extract_restaurant_info(results)
-
-    for place in restaurants_result:
-        print(
-            f"Name: {place['restaurant_name']}, Address: {place.get('vicinity', 'N/A')}"
-        )
