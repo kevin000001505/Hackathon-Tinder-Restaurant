@@ -1,6 +1,6 @@
 IMAGE_EXPIRY_SECONDS = 3600  # Image expiry time
 
-FIREBASE_ACCOUNT_KEY = "/Users/kevinhsu/Documents/Hackathon-Tinder-Restaurant/backend/utils/Hackathon Firebase Admin SDK.json"
+FIREBASE_ACCOUNT_KEY = "./utils/Hackathon Firebase Admin SDK.json"
 FIREBASE_COLLECTION = "(default)"
 
 FIELDS = [
