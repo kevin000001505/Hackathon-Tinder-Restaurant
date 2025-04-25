@@ -207,8 +207,7 @@ class UserInterestPredictor:
         filter_data = data[~data["place_id"].isin(target_place_id)]
 
         # STEP 1: Get embeddings from the reviews of the user's liked restaurant
-        print("User data:", user_data['extended_reviews'])
-        target_reviews = tools.extract_review(user_data["extended_reviews"])
+        target_reviews = user_data["extended_reviews"].str.cat(sep=' ')
         target_reviews_embedding = tools.get_vector(target_reviews)
 
         # STEP 2: Calculate similarity between target restaurant and each potential recommendation
