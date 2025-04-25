@@ -22,8 +22,8 @@ class Tools:
         else:
             raise ValueError("Invalid review format. Not a list or dict.")
 
-    def get_vector(self, texts: List[str]) -> np.ndarray:
-        if texts:
+    def get_vector(self, texts: str) -> np.ndarray:
+        if len(texts)>0:
             return embedding(texts).vector
         return np.zeros(embedding.vocab.vectors.shape[1])
 
