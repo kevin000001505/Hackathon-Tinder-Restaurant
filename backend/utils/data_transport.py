@@ -86,16 +86,4 @@ class FirebaseClient:
             logging.error(f"Error retrieving data from Firebase: {str(e)}")
             return None
 
-    def check_document_exists(self, user_id):
-        """Check if a document exists for a given user_id"""
-        doc_ref = self.db.collection("restaurants").document(user_id)
-        doc = doc_ref.get()
-        return doc.exists
 
-
-if __name__ == "__main__":
-    firebase_client = FirebaseClient()
-    exists = firebase_client.check_document_exists('t24IxC0WwoweTtN426TF')
-    print(f"Document exists: {exists}")
-    firebase_data = firebase_client.get_data('t24IxC0WwoweTtN426TF')
-    print(firebase_data)

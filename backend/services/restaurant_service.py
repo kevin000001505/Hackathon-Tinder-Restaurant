@@ -7,7 +7,7 @@ def search_nearby_restaurants(
     address=None,
     lat=None,
     lng=None,
-    radius=100000,
+    radius=10000,
     next_page_token=None,
     last_info=None,
 ):

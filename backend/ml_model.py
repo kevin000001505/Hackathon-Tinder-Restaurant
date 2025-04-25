@@ -35,19 +35,26 @@ class UserInterestPredictor:
         self.kproto = KPrototypes(n_clusters=4, init="Cao", verbose=1)
 
     def predict(
-        self, cluster_data: pd.DataFrame, like_place_id: list, dislike_place_id: list
+        self, cluster_data: List[dict], like_place_id: list, dislike_place_id: list
     ):
         """
         Predicts restaurants that might interest a user based on their previous choices.
+        
+        This function works by:
+        1. Converting input data to a DataFrame
+        2. Creating a weighted scoring system based on cluster preferences
+        3. Adjusting weights based on liked/disliked restaurants
+        4. Ranking remaining restaurants using the weighted scores
 
         Args:
-            cluster_data (pd.DataFrame): Pre-clustered restaurant data
-            like_place_id (list): User's previously liked restaurants ids
-            dislike_place_id (list): User's previously disliked restaurants ids
+            cluster_data (List[dict]): Pre-clustered restaurant data
+            like_place_id (list): List of restaurant IDs the user has liked
+            dislike_place_id (list): List of restaurant IDs the user has disliked
 
         Returns:
-            pd.DataFrame: Filtered and ranked restaurant recommendations
+            pd.DataFrame: Sorted restaurant recommendations with ranking scores
         """
+        cluster_data = pd.DataFrame(cluster_data)
         cluster_weights_dict = {
             str(cluster): 0 for cluster in cluster_data["cluster"].unique()
         }
@@ -79,18 +86,26 @@ class UserInterestPredictor:
         )
         return rank_data
 
-    def clustering(self, restaurants_data) -> pd.DataFrame:
+    def clustering(self, restaurants_data: List[dict]) -> pd.DataFrame:
         """
         Performs clustering on restaurant data to group similar restaurants.
+        
+        The clustering process involves:
+        1. Data preprocessing (one-hot encoding, feature extraction)
+        2. Feature selection by dropping text columns
+        3. Identifying categorical features for K-Prototypes
+        4. Applying K-Prototypes clustering algorithm
+        5. Assigning cluster labels to restaurants
 
         Args:
-            restaurants_data (List[dict]): List of restaurant data dictionaries
+            restaurants_data (List[dict]): Raw restaurant data containing features
 
         Returns:
-            pd.DataFrame: Processed data with cluster assignments
+            pd.DataFrame: Original data with added cluster assignments
         """
         # STEP 1: Preprocess the data for clustering
-        processed_data = self.preprocess_data(restaurants_data)
+        restaurant_df = pd.DataFrame(restaurants_data)
+        processed_data = self.preprocess_data(restaurant_df)
 
         # STEP 2: Drop text columns that shouldn't be used for clustering
         features_df = processed_data.drop(columns=config.TEXT_COLUMNS)
@@ -109,27 +124,32 @@ class UserInterestPredictor:
         )
 
         # STEP 5: Add place_id and cluster assignments back to the data
-        processed_data["place_id"] = self.place_id_list
-        processed_data["cluster"] = cluster_labels
+        # processed_data["place_id"] = self.place_id_list
+        # processed_data["cluster"] = cluster_labels
+        restaurant_df["cluster"] = cluster_labels
         logging.info(f"Clustering completed with {len(set(cluster_labels))} clusters.")
+        
 
-        return processed_data
+        return restaurant_df
 
-    def preprocess_data(self, restaurant_data: List[dict]):
+    def preprocess_data(self, restaurant_df: pd.DataFrame) -> pd.DataFrame:
         """
-        Preprocesses raw restaurant data for clustering.
-
-        Performs one-hot encoding, extracts location coordinates,
-        processes reviews, and handles special data types.
+        Preprocesses raw restaurant data for clustering analysis.
+        
+        Preprocessing steps include:
+        1. One-hot encoding of restaurant types
+        2. Storing place IDs for reference
+        3. Extracting geographic coordinates
+        4. Processing text reviews
+        5. Cleaning data types (converting boolean to int, handling NA values)
+        6. Dropping unnecessary columns
 
         Args:
-            restaurant_data (List[dict]): Raw restaurant data
+            restaurant_df (pd.DataFrame): Raw restaurant data frame
 
         Returns:
-            pd.DataFrame: Processed data ready for clustering
+            pd.DataFrame: Cleaned and processed data ready for clustering
         """
-        # STEP 1: Convert json to DataFrame
-        restaurant_df = pd.DataFrame(restaurant_data)
 
         # STEP 2: One-hot encode restaurant types
         restaurant_df = self.one_hot_encode_types(restaurant_df)
@@ -155,7 +175,7 @@ class UserInterestPredictor:
 
         # Handle missing price levels (N/A -> 3 as a default mid-range price)
         df_clean["price_level"] = df_clean["price_level"].map(
-            lambda x: int(x) if x != "N/A" else 3
+            lambda x: int(float(x)) if x != "N/A" else 3
         )
         # Replace N/A with medium rating (3)
         df_clean["rating"] = df_clean["rating"].map(
@@ -166,16 +186,19 @@ class UserInterestPredictor:
 
     def one_hot_encode_types(self, df: pd.DataFrame):
         """
-        Performs one-hot encoding for restaurant types.
-
-        Creates binary columns for each possible restaurant type
-        (e.g., 'cafe', 'italian', etc.)
+        Creates binary features for each restaurant type using one-hot encoding.
+        
+        The encoding process:
+        1. Collects all unique restaurant types from the dataset
+        2. Creates a binary matrix for efficient encoding
+        3. Sets values to 1 where a restaurant has a specific type
+        4. Adds encoded columns to the original dataframe
 
         Args:
-            df (pd.DataFrame): Restaurant data
+            df (pd.DataFrame): Restaurant data with 'types' column containing lists
 
         Returns:
-            pd.DataFrame: Data with one-hot encoded type columns
+            pd.DataFrame: Original data with added binary type columns
         """
         # STEP 1: Collect all unique restaurant types across all restaurants
         types_set = set()
@@ -183,7 +206,6 @@ class UserInterestPredictor:
         new_cols = sorted(types_set)
 
         # STEP 2: Create a binary matrix for one-hot encoding
-        # This is more efficient than creating each column individually
         matrix = np.zeros((df.shape[0], len(new_cols)), dtype=int)
 
         # STEP 3: Fill the matrix with 1s where restaurants have the corresponding type
@@ -206,22 +228,23 @@ class UserInterestPredictor:
         dislike_place_id: list,
     ) -> pd.DataFrame:
         """
-        Ranks restaurants based on similarity to user preferences and cluster weights.
-
-        This function computes relevance scores for candidate restaurants by:
-        1. Calculating semantic similarity between restaurant reviews using cosine similarity
-        2. Balancing positive preferences (likes) against negative preferences (dislikes)
-        3. Incorporating cluster weights based on user preference distribution
-        4. Creating a final composite score for ranking
+        Ranks restaurants based on user preferences and similarity scores.
+        
+        Ranking process:
+        1. Calculates text similarity between restaurant reviews
+        2. Considers both positive (liked) and negative (disliked) preferences
+        3. Applies cluster weights based on user history
+        4. Combines similarity scores with cluster weights
+        5. Sorts restaurants by final composite score
 
         Args:
-            data (pd.DataFrame): Complete restaurant dataset with cluster assignments
-            cluster_weights_dict (dict): Weights for each cluster based on user preferences
-            like_place_id (list): List of place IDs the user has liked
-            dislike_place_id (list): List of place IDs the user has disliked
+            data (pd.DataFrame): Restaurant dataset with clusters
+            cluster_weights_dict (dict): Weight for each cluster based on preferences
+            like_place_id (list): IDs of liked restaurants
+            dislike_place_id (list): IDs of disliked restaurants
 
         Returns:
-            pd.DataFrame: Restaurants sorted by final score in descending order
+            pd.DataFrame: Sorted restaurants with similarity and ranking scores
         """
         # Initialize similarity score lists for both liked and disliked restaurants
         like_cosine_similarity_list = []
@@ -262,43 +285,5 @@ class UserInterestPredictor:
         # Create a copy to avoid pandas warning
         filter_data = filter_data.copy()
 
-        # SCORE COMPUTATION: Calculate net similarity score
-        # Subtracting dislike similarity from like similarity to balance preferences
-        filter_data["similarity"] = (
-            np.array(like_cosine_similarity_list) * 100
-            - np.array(dislike_cosine_similarity_list) * 100
-        ).tolist()
-
-        # Store individual similarity components for analysis
-        filter_data["positive_similarity"] = like_cosine_similarity_list
-        filter_data["negative_similarity"] = dislike_cosine_similarity_list
-
-        # FINAL RANKING: Combine cluster weights with similarity scores
-        # This creates a composite score that considers both content similarity
-        # and cluster-based user preference patterns
-        filter_data["final_score"] = (
-            filter_data["cluster"].astype(str).map(cluster_weights_dict)
-            + filter_data["similarity"]
-        )
-
-        # Return restaurants sorted by descending similarity (most similar first)
         return filter_data.sort_values(by="final_score", ascending=False)
 
-
-if __name__ == "__main__":
-    # Example usage
-    import json
-
-    user_interest_predictor = UserInterestPredictor()
-
-    with open(
-        "/Users/kevinhsu/Documents/Hackathon-Tinder-Restaurant/restaurant_data.json",
-        "r",
-    ) as json_file:
-        data = json.load(json_file)
-    # Get the clustering data
-    user_interest_predictor.clustering(data)
-    cluster_data = pd.read_csv("data/cluster_data.csv").fillna("")
-    breakpoint()
-    predictions = user_interest_predictor.predict(cluster_data, data[0:5])
-    print(predictions)
