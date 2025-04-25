@@ -134,6 +134,11 @@ async function getRestaurantsInfo() {
 }
 
 function displayRestaurantInfo() {
+    if (!restaurants_info.value || restaurant_index.value >= restaurants_info.value.length) {
+        console.error('No more restaurants to display or restaurant data is undefined');
+        return;
+    }
+    
     r_name.value = restaurants_info.value[restaurant_index.value].restaurant_name;
     r_addr.value = restaurants_info.value[restaurant_index.value].formatted_address;
     r_price.value = restaurants_info.value[restaurant_index.value].price_level;
@@ -141,13 +146,14 @@ function displayRestaurantInfo() {
     r_phone.value = restaurants_info.value[restaurant_index.value].phone_number;
     r_summary.value = restaurants_info.value[restaurant_index.value].editorial_summary;
     r_hours.value = restaurants_info.value[restaurant_index.value].opening_hours;
-    getRestaurantPhotos(restaurants_info.value[restaurant_index.value].place_id)
+    getRestaurantPhotos(restaurants_info.value[restaurant_index.value].place_id);
 }
 
 const interact_counter = ref(0);
 
 async function send_preferences() {
     if (interact_counter.value % 5 == 0) {
+        loading.value = true;
         const response = await fetch(`${backend_url}suggestion`, {
             method: 'POST',
             credentials: 'include',
@@ -159,24 +165,60 @@ async function send_preferences() {
                 like_place_id: likes.value,
                 dislike_place_id: dislikes.value,
             }),
-        })
-        console.log(response.results)
+        });
+        
+        const data = await response.json();
+        console.log('Suggestion response:', data);
+        
+        // Fix: The API returns data.suggestion instead of data.results
+        if (data && data.suggestion && data.suggestion.length > 0) {
+            // Update restaurant list with the suggested restaurants
+            restaurants_info.value = data.suggestion;
+            // Reset the restaurant index to start showing the first suggested restaurant
+            restaurant_index.value = 0;
+            // Clear previous likes and dislikes after they've been processed
+            likes.value = [];
+            dislikes.value = [];
+            // Display the first suggested restaurant
+            displayRestaurantInfo();
+        } else {
+            console.log('No suggestions received or empty response');
+            // If no suggestions, let's get new restaurants
+            await getRestaurantsInfo();
+        }
     }
 }
+
 async function like() {
     interact_counter.value++;
-    send_preferences();
     likes.value.push(placeID.value);
-    restaurant_index.value++;
-    displayRestaurantInfo();
+    
+    await send_preferences();
+    
+    // Only increment and display if we didn't reset the index in send_preferences
+    if (restaurant_index.value + 1 < restaurants_info.value.length) {
+        restaurant_index.value++;
+        displayRestaurantInfo();
+    } else if (restaurant_index.value + 1 >= restaurants_info.value.length) {
+        // We're at the end of our list, get more restaurants
+        await getRestaurantsInfo();
+    }
 }
 
 async function dislike() {
     interact_counter.value++;
-    send_preferences();
     dislikes.value.push(placeID.value);
-    restaurant_index.value++;
-    displayRestaurantInfo();
+    
+    await send_preferences();
+    
+    // Only increment and display if we didn't reset the index in send_preferences
+    if (restaurant_index.value + 1 < restaurants_info.value.length) {
+        restaurant_index.value++;
+        displayRestaurantInfo();
+    } else if (restaurant_index.value + 1 >= restaurants_info.value.length) {
+        // We're at the end of our list, get more restaurants
+        await getRestaurantsInfo();
+    }
 }
 
 const loading = ref(true);

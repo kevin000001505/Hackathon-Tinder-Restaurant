@@ -25,23 +25,7 @@ USER = {
     'username': 'user',
     'password': 'pass'
 }
-"""
-@app.before_request
-def before_request():
-    #Perform actions before each request.
-    if request.endpoint in ['login', 'static', 'check-session']:  # Exclude login and static routes
-        return  # Allow access to login and static files without session check
 
-    session_id = request.cookies.get('session_id')
-    if not session_id:
-        logging.info("Session ID not found in cookie")
-        return jsonify({'message': 'Not authenticated'}), 401
-
-    session_data = session.get_session_data(session_id)
-    if not session_data:
-        logging.info(f"Invalid session ID: {session_id}")
-        return jsonify({'message': 'Invalid session. Please log in.'}), 401
-"""
 @app.route('/check-session', methods=['GET'])
 def check_session():
     """Check if the user has a valid session."""
@@ -51,7 +35,7 @@ def check_session():
         return jsonify({'message': 'Not authenticated'}), 401
     session_data = session.get_session_data(session_id)
     if session_data:
-        logging.info(f"Session is valid")
+        logging.info("Session is valid")
         return jsonify({'message': 'Session is valid'}), 200
     else:
         logging.info("Session is invalid or expired")
@@ -87,7 +71,7 @@ def search_restaurants():
     lng = request.args.get("lng", type=float)
     radius = request.args.get("radius", default=10000, type=int)
     next_page_token = None
-    user_id = request.args.get("user_id", type=str, default=None)
+    user_id = request.args.get("user_id", type=str, default="normal")
 
     # Get the first batch of results
     results, next_page_token, status_code, error = search_nearby_restaurants(
@@ -169,17 +153,21 @@ def get_suggestion():
         # Get user liked restaurant IDs
         like_place_id = data.get("like_place_id", [])
         dislike_place_id = data.get("dislike_place_id", [])
-        user_id = data.get("user_id")
         
-        if not user_id:
-            return jsonify({"error": "user_id is required"}), 400
+        # Get user_id with default "normal" if not provided or empty
+        user_id = data.get("user_id")
+        if not user_id:  # This will handle both None and empty string
+            user_id = "normal"
             
+        app.logger.info(f"Using user_id: {user_id}")
+        
         cluster_data = firebase_client.get_data(user_id=user_id)
         
         if not cluster_data:
             return jsonify({"error": "No data found for user"}), 404
 
         suggestion = model.predict(cluster_data, like_place_id, dislike_place_id)
+        app.logger.info(f"Suggestion: \n{suggestion["restaurant_name"]}")
         return jsonify({"suggestion": suggestion.to_dict(orient="records")}), 200
     except Exception as e:
         app.logger.error(f"Error in get_suggestion: {str(e)}", exc_info=True)

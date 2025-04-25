@@ -39,7 +39,7 @@ class UserInterestPredictor:
     ):
         """
         Predicts restaurants that might interest a user based on their previous choices.
-        
+
         This function works by:
         1. Converting input data to a DataFrame
         2. Creating a weighted scoring system based on cluster preferences
@@ -89,7 +89,7 @@ class UserInterestPredictor:
     def clustering(self, restaurants_data: List[dict]) -> pd.DataFrame:
         """
         Performs clustering on restaurant data to group similar restaurants.
-        
+
         The clustering process involves:
         1. Data preprocessing (one-hot encoding, feature extraction)
         2. Feature selection by dropping text columns
@@ -124,18 +124,15 @@ class UserInterestPredictor:
         )
 
         # STEP 5: Add place_id and cluster assignments back to the data
-        # processed_data["place_id"] = self.place_id_list
-        # processed_data["cluster"] = cluster_labels
         restaurant_df["cluster"] = cluster_labels
         logging.info(f"Clustering completed with {len(set(cluster_labels))} clusters.")
-        
 
         return restaurant_df
 
     def preprocess_data(self, restaurant_df: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocesses raw restaurant data for clustering analysis.
-        
+
         Preprocessing steps include:
         1. One-hot encoding of restaurant types
         2. Storing place IDs for reference
@@ -187,7 +184,7 @@ class UserInterestPredictor:
     def one_hot_encode_types(self, df: pd.DataFrame):
         """
         Creates binary features for each restaurant type using one-hot encoding.
-        
+
         The encoding process:
         1. Collects all unique restaurant types from the dataset
         2. Creates a binary matrix for efficient encoding
@@ -229,7 +226,7 @@ class UserInterestPredictor:
     ) -> pd.DataFrame:
         """
         Ranks restaurants based on user preferences and similarity scores.
-        
+
         Ranking process:
         1. Calculates text similarity between restaurant reviews
         2. Considers both positive (liked) and negative (disliked) preferences
@@ -284,6 +281,23 @@ class UserInterestPredictor:
 
         # Create a copy to avoid pandas warning
         filter_data = filter_data.copy()
+        # SCORE COMPUTATION: Calculate net similarity score
+        # Subtracting dislike similarity from like similarity to balance preferences
+        filter_data["similarity"] = (
+            np.array(like_cosine_similarity_list) * 100
+            - np.array(dislike_cosine_similarity_list) * 100
+        ).tolist()
+
+        # Store individual similarity components for analysis
+        filter_data["positive_similarity"] = like_cosine_similarity_list
+        filter_data["negative_similarity"] = dislike_cosine_similarity_list
+
+        # FINAL RANKING: Combine cluster weights with similarity scores
+        # This creates a composite score that considers both content similarity
+        # and cluster-based user preference patterns
+        filter_data["final_score"] = (
+            filter_data["cluster"].astype(str).map(cluster_weights_dict)
+            + filter_data["similarity"]
+        )
 
         return filter_data.sort_values(by="final_score", ascending=False)
-
